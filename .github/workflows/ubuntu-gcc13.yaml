@@ -1,0 +1,43 @@
+name: ubuntu-gcc13
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+
+    steps:
+      - name: Installation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev p7zip gobjc g++-13 wget sudo libmsgpack-dev/jammy
+
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: v2.8.9
+
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: build
+        run: |
+          export XMAKE_ROOT="y"
+          g++-13 -v
+          export CXX=g++-13
+          export CC=gcc-13
+          xmake build -y
+          xmake install -o .
+
+      - name: build test and run test
+        run: |
+          ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out
+          xmake build -v -y --file=./test_xmake.lua
+          xmake install -o . --file=./test_xmake.lua
+          ./bin/cpp23

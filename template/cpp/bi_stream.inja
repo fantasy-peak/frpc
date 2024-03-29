@@ -1,0 +1,288 @@
+namespace {{node.property.namespace}} {
+
+enum class {{value.caller}}{{value.callee}} {
+    {% for func in value.definitions %}
+        {{func.func_name}},
+    {% endfor %}
+
+};
+
+} // {{node.property.namespace}}
+
+MSGPACK_ADD_ENUM({{node.property.namespace}}::{{value.caller}}{{value.callee}})
+
+namespace {{node.property.namespace}} {
+
+#ifdef __cpp_impl_coroutine
+
+class {{value.caller}} final {
+public:
+    {{value.caller}}(const ChannelConfig& config,
+                         std::function<void(std::string)> error)
+        : m_config(config)
+        ,m_channel(std::make_unique<BiChannel>(config, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+    }
+
+    ~{{value.caller}}() {
+        if (m_pool_ptr)
+            m_pool_ptr->stop();
+    }
+
+    void start() {
+        m_channel->start();
+    }
+
+    auto& socket() {
+        return m_channel->socket();
+    }
+
+    auto& context() {
+        return m_channel->context();
+    }
+
+    {% for func in value.definitions %}
+
+    auto {{func.func_name}}() {
+        auto req_id = m_req_id.fetch_add(1);
+        auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
+
+        auto buffer = pack<decltype(header)>(std::move(header));
+        std::string header_str((char*)buffer.data(), buffer.size());
+
+        auto stream_ptr = std::make_shared<Stream<void({{_format_args_type(func.inputs)}})>>(
+            [this, header_str = std::move(header_str)] ({{_format_args(func.inputs)}}) mutable {
+                auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
+                std::vector<zmq::message_t> snd_bufs;
+                snd_bufs.emplace_back(zmq::message_t(header_str.data(), header_str.size()));
+                snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+                m_channel->send(std::move(snd_bufs));
+            },
+            [this] {});
+        auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.outputs)}})>>(
+            m_pool_ptr->getIoContext(),
+            m_config.channel_size);
+        {
+            std::function<void(std::tuple<{{_format_args_type(func.outputs)}}>)> func = [channel_ptr, this](std::tuple<{{_format_args_type(func.outputs)}}> tp) mutable {
+                auto& [{{_format_args_name(func.outputs)}}] = tp;
+                if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.outputs)}}))
+                    m_error("Failed to store message to channel!!!");
+            };
+            std::lock_guard lk(m_mtx);
+            m_cb.emplace(req_id, std::move(func));
+            m_close_cb.emplace(req_id, [channel_ptr] { channel_ptr->close(); });
+        }
+        return std::make_tuple(stream_ptr, channel_ptr);
+    }
+
+    {% endfor %}
+
+    static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<{{value.caller}}>(config, std::move(error));
+    }
+
+private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
+        if (recv_bufs.size() != 2) {
+            m_error("client recv invalid stream server response packets!!!");
+            return;
+        }
+        try {
+            auto [req_id, req_type, is_close] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>>(recv_bufs[0].data(), recv_bufs[0].size());
+            if (is_close) {
+                std::unique_lock lk(m_mtx);
+                m_cb.erase(req_id);
+                m_close_cb[req_id]();
+                m_close_cb.erase(req_id);
+                return;
+            }
+            switch (req_type) {
+                {% for func in value.definitions %}
+                    case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                        auto [{{_format_args_name(func.outputs)}}] = unpack<std::tuple<{{_format_args_type(func.outputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                        std::unique_lock lk(m_mtx);
+                        if (m_cb.find(req_id) == m_cb.end())
+                            break;
+                        auto& cb = m_cb[req_id];
+                        auto callback = std::any_cast<std::function<void(std::tuple<{{_format_args_type(func.outputs)}}>)>>(cb);
+                        lk.unlock();
+                        callback({{_format_args_name_and_move(func.outputs)}});
+                        break;
+                    }
+                {% endfor %}
+                default:
+                    m_error("error type");
+            }
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
+        } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        }
+    }
+
+    ChannelConfig m_config;
+    std::unique_ptr<BiChannel> m_channel;
+    std::function<void(std::string)> m_error;
+    std::mutex m_mtx;
+    std::unordered_map<uint64_t, std::any> m_cb;
+    std::unordered_map<uint64_t, std::function<void()>> m_close_cb;
+    std::atomic_uint64_t m_req_id{0};
+    std::unique_ptr<ContextPool> m_pool_ptr;
+};
+
+struct {{value.callee}}Handler {
+    {% for func in value.definitions %}
+    virtual void {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+    {% endfor %}
+};
+
+struct Coro{{value.callee}}Handler {
+    {% for func in value.definitions %}
+#ifdef __cpp_impl_coroutine
+    virtual asio::awaitable<void> {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+#else
+    virtual void {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+#endif
+    {% endfor %}
+};
+
+class {{value.callee}} final {
+public:
+    {{value.callee}}(const ChannelConfig& config,
+    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+            std::function<void(std::string)> error) 
+            : m_config(config)
+            , m_handler(std::move(handler))
+            , m_error(error) {
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
+            m_channel = std::make_unique<BiChannel>(config, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+    }
+    ~{{value.callee}}() {
+        if (m_pool_ptr)
+            m_pool_ptr->stop();
+    }
+
+    auto& socket() {
+        return m_channel->socket();
+    }
+
+    auto& context() {
+        return m_channel->context();
+    }
+
+    void start() {
+        m_channel->start();
+    }
+
+    static auto create(ChannelConfig& config, 
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
+    }
+
+private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs)  {
+        if (recv_bufs.size() != 3) {
+            m_error("server recv invalid stream client request packets!!!");
+            return;
+        }
+        try {
+            auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+            switch(req_type) {
+            {% for func in value.definitions %}
+                case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                    auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    auto& [{{_format_args_name(func.inputs)}}] = tp;
+                    std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>> channel_ptr;
+                    {
+                        std::lock_guard lk(m_mtx);
+                        if (m_channel_mapping.contains(req_id)) {
+                            channel_ptr = std::any_cast<decltype(channel_ptr)>(m_channel_mapping[req_id]);
+                            if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
+                                m_error("Failed to store message to channel!!!");
+                            return;
+                        }
+                        channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>(
+                            m_pool_ptr->getIoContext(), 
+                            m_config.channel_size);
+                        m_channel_mapping[req_id] = channel_ptr;
+                    }
+                    if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
+                        m_error("Failed to store message to channel!!!");
+
+                    auto is_open = std::make_tuple(req_id, req_type, false);
+                    auto is_open_buffer = pack<decltype(is_open)>(is_open);
+                    auto is_close = std::make_tuple(req_id, req_type, true);
+                    auto is_close_buffer = pack<decltype(is_close)>(is_close);
+                    // set open stream flag
+                    recv_bufs[1] = zmq::message_t(is_open_buffer.data(), is_open_buffer.size());
+                    // set close stream flag
+                    recv_bufs[2] = zmq::message_t(is_close_buffer.data(), is_close_buffer.size());
+                    auto ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
+
+                    auto out = std::make_shared<Stream<void({{_format_args_type(func.outputs)}})>>([ptr, this] ({{_format_args(func.outputs)}}) mutable {
+                        auto& recv_bufs = *ptr;
+                        auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                        auto close = pack<bool>(false);
+                        std::vector<zmq::message_t> snd_bufs;
+                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
+                        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+                        m_channel->send(snd_bufs);
+                    }, [ptr, this] {
+                        auto& recv_bufs = *ptr;
+                        auto close = pack<bool>(true);
+                        std::vector<zmq::message_t> snd_bufs;
+                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
+                        snd_bufs.emplace_back(zmq::message_t(close.data(), close.size()));
+                        m_channel->send(snd_bufs);
+                    });
+                    std::visit([&](auto&& arg) mutable {
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
+                            arg->{{func.func_name}}(channel_ptr, std::move(out));
+                        } else {
+                            asio::co_spawn(m_pool_ptr->getIoContext(),
+                                [] (auto& arg, auto channel_ptr, auto out) mutable -> asio::awaitable<void> {
+                                    co_await arg->{{func.func_name}}(channel_ptr, std::move(out));
+                                    co_return;
+                                }(arg, std::move(channel_ptr), std::move(out)),
+                                asio::detached);
+                        }
+                    },
+                    m_handler);
+                    break;
+                }
+            {% endfor %}
+            default:
+                m_error("error type");
+            }
+        } catch (const msgpack::type_error& err) {
+            m_error(err.what());
+        }
+    }
+
+    ChannelConfig m_config;
+    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
+    std::function<void(std::string)> m_error;
+    std::unique_ptr<BiChannel> m_channel;
+    std::mutex m_mtx;
+    std::unique_ptr<ContextPool> m_pool_ptr;
+    std::unordered_map<uint64_t, std::any> m_channel_mapping;
+}; 
+
+#endif
+
+} // {{node.property.namespace}}

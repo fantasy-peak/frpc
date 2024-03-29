@@ -1,0 +1,211 @@
+namespace {{node.property.namespace}} {
+
+enum class {{value.caller}}{{value.callee}} {
+    {% for func in value.definitions %}
+        {{func.func_name}},
+    {% endfor %}
+
+};
+
+inline std::string_view toString(const {{value.caller}}{{value.callee}} value) {
+    switch (value) {
+    {% for func in value.definitions %}
+        case {{value.caller}}{{value.callee}}::{{func.func_name}}:
+            return "{{func.func_name}}";
+    {% endfor %}
+    default:
+        return "???";
+    }
+}
+
+template <>
+inline {{value.caller}}{{value.callee}} fromString<{{value.caller}}{{value.callee}}>(const std::string& value) {
+	{% for func in value.definitions %}
+	if (value == "{{func.func_name}}")
+		return {{value.caller}}{{value.callee}}::{{func.func_name}};
+	{% endfor %}
+	throw std::bad_cast();
+}
+
+} // {{node.property.namespace}}
+
+MSGPACK_ADD_ENUM({{node.property.namespace}}::{{value.caller}}{{value.callee}})
+
+namespace {{node.property.namespace}} {
+
+struct {{value.callee}}Handler {
+    {% for func in value.definitions %}
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}) = 0;
+    {% endfor %}
+};
+
+struct Coro{{value.callee}}Handler {
+    {% for func in value.definitions %}
+#ifdef __cpp_impl_coroutine
+        virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}) = 0;
+#else
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}) = 0;
+#endif
+    {% endfor %}
+};
+
+class {{value.callee}} final {
+public:
+        {{value.callee}}(const ChannelConfig& config,
+            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+            std::function<void(std::string)> error) 
+            : m_handler(std::move(handler))
+            , m_error(error) {
+#ifdef __cpp_impl_coroutine
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
+#endif
+            m_channel = std::make_unique<UniChannel>(config, [this](auto& recv) mutable { dispatch(recv); }, error);
+        }
+        {{value.callee}}(const ChannelConfig& config,
+            const std::shared_ptr<zmq::context_t>& context,
+            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+            std::function<void(std::string)> error)
+            : m_handler(std::move(handler))
+            , m_error(error) {
+#ifdef __cpp_impl_coroutine
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
+#endif
+            m_channel = std::make_unique<UniChannel>(context, config, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }, error);
+        }
+        ~{{value.callee}}() {
+#ifdef __cpp_impl_coroutine
+            if (m_pool_ptr)
+                m_pool_ptr->stop();
+#endif
+        }
+
+        void start() {
+            m_channel->subscribe("");
+            m_channel->start();
+        }
+
+        auto& socket() {
+            return m_channel->socket();
+        }
+
+        auto& context() {
+            return m_channel->context();
+        }
+
+        static auto create(ChannelConfig& config,
+                            std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                            std::function<void(std::string)> error) {
+            config.socktype = zmq::socket_type::sub;
+            return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
+        }
+
+private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
+        if (recv_bufs.size() != 2) {
+            m_error("Illegal response packet");
+            return;
+        }
+        try {
+            auto req_type = unpack<{{value.caller}}{{value.callee}}>(recv_bufs[0].data(), recv_bufs[0].size());
+            switch(req_type) {
+            {% for func in value.definitions %}
+                case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                    auto [{{_format_args_name(func.inputs)}}] = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    std::visit(
+                        [&](auto&& arg) {
+                            using T = std::decay_t<decltype(arg)>;
+                            if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
+                                arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}});
+                            } else {
+#ifdef __cpp_impl_coroutine
+                                asio::co_spawn(
+                                    m_pool_ptr->getIoContext(),
+                                    [] (auto& arg, {{_format_args(func.inputs)}}) mutable -> asio::awaitable<void> {
+                                        co_await arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}});
+                                        co_return;
+                                    }(arg, {{_format_args_name_and_move(func.inputs)}}),
+                                    asio::detached);
+#endif
+                            }
+                        },
+                        m_handler);
+                    break;
+                }
+            {% endfor %}
+            default:
+                m_error("error type");
+            }
+        } catch (const msgpack::type_error& err) {
+            m_error(err.what());
+        }
+    }
+
+    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
+    std::function<void(std::string)> m_error;
+    std::unique_ptr<UniChannel> m_channel;
+    std::mutex m_mtx;
+#ifdef __cpp_impl_coroutine
+    std::unique_ptr<ContextPool> m_pool_ptr;
+#endif
+}; 
+
+class {{value.caller}} final {
+public:
+        {{value.caller}}(const ChannelConfig& config)
+            : m_context(std::make_shared<zmq::context_t>(config.io_threads))
+            , m_socket(*m_context, config.socktype){
+            m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
+            m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
+            m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
+            m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
+            m_socket.set(zmq::sockopt::linger, config.linger);
+            if (config.tcp_keepalive) {
+                m_socket.set(zmq::sockopt::tcp_keepalive, 1);
+                m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+                m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+                m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+            }
+            m_socket.bind(config.addr);
+        }
+
+        {{value.caller}}(const ChannelConfig& config,
+            const std::shared_ptr<zmq::context_t>& context)
+            : m_context(context)
+            , m_socket(*m_context, config.socktype){
+            if (config.tcp_keepalive) {
+                m_socket.set(zmq::sockopt::tcp_keepalive, 1);
+                m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+                m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+                m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+            }
+            m_socket.bind(config.addr);
+        }
+
+        ~{{value.caller}}() {}
+
+        static auto create(ChannelConfig& config) {
+            config.socktype = zmq::socket_type::pub;
+            return std::make_unique<{{value.caller}}>(config);
+        }
+
+        {% for func in value.definitions %}
+            auto {{func.func_name}} ({{_format_args(func.inputs)}}) {
+                static auto pub_topic = pack<{{value.caller}}{{value.callee}}>({{value.caller}}{{value.callee}}::{{func.func_name}});
+                auto str = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
+                std::vector<zmq::message_t> snd_bufs;
+                snd_bufs.emplace_back(zmq::message_t(pub_topic.data(), pub_topic.size()));
+                snd_bufs.emplace_back(zmq::message_t(str.data(), str.size()));
+                std::lock_guard lk(m_mtx);
+                return zmq::send_multipart(m_socket, std::move(snd_bufs));
+            }
+        {% endfor %}
+
+private:
+    std::shared_ptr<zmq::context_t> m_context;
+    zmq::socket_t m_socket;
+    std::mutex m_mtx;
+}; 
+
+} // {{node.property.namespace}}

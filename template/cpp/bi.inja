@@ -1,0 +1,301 @@
+namespace {{node.property.namespace}} {
+
+enum class {{value.caller}}{{value.callee}} {
+    {% for func in value.definitions %}
+        {{func.func_name}},
+    {% endfor %}
+
+};
+
+} // {{node.property.namespace}}
+
+MSGPACK_ADD_ENUM({{node.property.namespace}}::{{value.caller}}{{value.callee}})
+
+namespace {{node.property.namespace}} {
+
+class {{value.caller}} final {
+public:
+        {{value.caller}}(const ChannelConfig& config,
+              std::function<void(std::string)> error) 
+              : m_channel(std::make_unique<BiChannel>(config, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
+              , m_error(error) {
+        }
+
+        void start() {
+            m_channel->start();
+        }
+
+        auto& socket() {
+            return m_channel->socket();
+        }
+
+        auto& context() {
+            return m_channel->context();
+        }
+
+    {% for func in value.definitions %}
+
+        void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args(func.outputs)}})> cb) {
+            auto req_id = m_req_id.fetch_add(1);
+            auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
+            auto buffer = pack<decltype(header)>(std::move(header));
+            auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
+
+            std::vector<zmq::message_t> snd_bufs;
+            snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
+            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+            {
+                std::lock_guard lk(m_mtx);
+                m_cb.emplace(req_id, std::move(cb));
+            }
+            m_channel->send(std::move(snd_bufs));
+        }
+
+        void {{func.func_name}}({{_format_args(func.inputs)}},
+            std::function<void({{_format_args(func.outputs)}})> cb,
+            std::chrono::milliseconds timeout,
+            std::function<void()> timeout_cb) {
+            auto req_id = m_req_id.fetch_add(1);
+            auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
+            auto buffer = pack<decltype(header)>(std::move(header));
+            auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
+
+            std::vector<zmq::message_t> snd_bufs;
+            snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
+            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+            {
+                std::lock_guard lk(m_mtx);
+                m_cb.emplace(req_id, std::move(cb));
+                m_timeout_cb.emplace(req_id, std::move(timeout_cb));
+            }
+            m_channel->send(std::move(snd_bufs),
+                std::move(timeout),
+                [this, req_id]() mutable {
+                std::unique_lock lk(m_mtx);
+#if __cplusplus >= 202302L
+                if (!m_cb.contains(req_id) || !m_timeout_cb.contains(req_id))
+                    return;
+#else
+                if (m_cb.find(req_id) == m_cb.end() || m_timeout_cb.find(req_id) == m_timeout_cb.end())
+                    return;
+#endif
+                auto cb = std::move(m_timeout_cb[req_id]);
+                m_timeout_cb.erase(req_id);
+                m_cb.erase(req_id);
+                lk.unlock();
+                cb();
+            });
+        }
+#ifdef __cpp_impl_coroutine
+    template <asio::completion_token_for<void({{_format_args_type(func.outputs)}})> CompletionToken>
+    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, CompletionToken&& token) {
+        return asio::async_initiate<CompletionToken, void({{_format_args_type(func.outputs)}})>(
+            [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}) mutable {
+                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+                {{func.func_name}}(
+                        {{_format_args_name_and_move(func.inputs)}},
+                        [handler_ptr = std::move(handler_ptr)]({{_format_args(func.outputs)}}) mutable {
+                            auto ex = asio::get_associated_executor(*handler_ptr);
+                            asio::post(ex, [{{_format_catch_move(func.outputs)}}, handler_ptr = std::move(handler_ptr)] () mutable -> void {
+                                (*handler_ptr)({{_format_args_name_and_move(func.outputs)}});
+                            });
+                        });
+            },
+            token,
+            {{_format_args_name_and_move(func.inputs)}});
+    }
+
+    template <asio::completion_token_for<void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)> CompletionToken>
+    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, std::chrono::milliseconds timeout, CompletionToken&& token) {
+        return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)>(
+            [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}, auto timeout) mutable {
+                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+                {{func.func_name}}(
+                            {{_format_args_name_and_move(func.inputs)}},
+                            [handler_ptr]({{_format_args(func.outputs)}}) mutable {
+                                auto ex = asio::get_associated_executor(*handler_ptr);
+                                asio::post(ex, [{{_format_catch_move(func.outputs)}}, handler_ptr = std::move(handler_ptr)] () mutable -> void {
+                                    (*handler_ptr)(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                                });
+                            },
+                            std::move(timeout),
+                            [handler_ptr] {
+                                auto ex = asio::get_associated_executor(*handler_ptr);
+                                asio::post(ex, [=, handler_ptr = std::move(handler_ptr)] () mutable -> void {
+                                    (*handler_ptr)(std::nullopt);
+                                });
+                            });
+            },
+            token,
+            {{_format_args_name_and_move(func.inputs)}}, std::move(timeout));
+    }
+#endif
+
+    {% endfor %}
+
+
+    static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<{{value.caller}}>(config, std::move(error));
+    }
+
+private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
+        if (recv_bufs.size() != 2) {
+            m_error("Illegal response packet");
+            return;
+        }
+        try {
+            auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[0].data(), recv_bufs[0].size());
+            switch(req_type) {
+            {% for func in value.definitions %}
+                case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                    auto [{{_format_args_name(func.outputs)}}] = unpack<std::tuple<{{_format_args_type(func.outputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    std::unique_lock lk(m_mtx);
+#if __cplusplus >= 202302L
+                    if (!m_cb.contains(req_id))
+                        break;
+#else
+                    if (m_cb.find(req_id) == m_cb.end())
+                        break;
+#endif
+                    auto cb = std::move(m_cb[req_id]);
+                    m_cb.erase(req_id);
+                    lk.unlock();
+                    auto callback = std::any_cast<std::function<void({{_format_args_type(func.outputs)}})>>(cb);
+                    callback({{_format_args_name_and_move(func.outputs)}});
+                    break;
+                }
+            {% endfor %}
+            default:
+                m_error("error type");
+            }
+        } catch (const msgpack::type_error& err) {
+            m_error(err.what());
+        } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        }
+    }
+
+    std::unique_ptr<BiChannel> m_channel;
+    std::function<void(std::string)> m_error;
+    std::mutex m_mtx;
+    std::unordered_map<uint64_t, std::any> m_cb;
+    std::unordered_map<uint64_t, std::function<void()>> m_timeout_cb;
+    std::atomic_uint64_t m_req_id{0};
+}; 
+
+struct {{value.callee}}Handler {
+    {% for func in value.definitions %}
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+    {% endfor %}
+};
+
+struct Coro{{value.callee}}Handler {
+    {% for func in value.definitions %}
+#ifdef __cpp_impl_coroutine
+        virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+#else
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+#endif
+    {% endfor %}
+};
+
+
+class {{value.callee}} final {
+public:
+        {{value.callee}}(const ChannelConfig& config,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+              std::function<void(std::string)> error) 
+              : m_handler(std::move(handler))
+              , m_error(error) {
+#ifdef __cpp_impl_coroutine
+                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+                m_pool_ptr->start();
+#endif
+                m_channel = std::make_unique<BiChannel>(config, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                    if (recv_bufs.size() != 3) {
+                        m_error("BiChannel recv illegal request packet");
+                        return;
+                    }
+                    try {
+                        auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                        switch(req_type) {
+                        {% for func in value.definitions %}
+                            case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                                auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
+                                auto& [{{_format_args_name(func.inputs)}}] = tp;
+                                std::function<void({{_format_args_type(func.outputs)}})> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)),this] ({{_format_args(func.outputs)}}) mutable {
+                                    auto& snd_bufs = *ptr;
+                                    auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                                    snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
+                                    m_channel->send(std::move(snd_bufs));
+                                };
+                                std::visit([&](auto&& arg) mutable {
+                                    using T = std::decay_t<decltype(arg)>;
+                                    if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
+                                        arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+                                    } else {
+#ifdef __cpp_impl_coroutine
+                                        asio::co_spawn(m_pool_ptr->getIoContext(),
+                                            [] (auto& arg, auto tp, auto out) mutable -> asio::awaitable<void> {
+                                                auto& [{{_format_args_name(func.inputs)}}] = tp;
+                                                co_await arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+                                                co_return;
+                                            }(arg, std::move(tp), std::move(out)),
+                                            asio::detached);
+#endif
+                                    }
+                                },
+                                m_handler);
+                                break;
+                            }
+                        {% endfor %}
+                        default:
+                            m_error("error type");
+                        }
+                    } catch (const msgpack::type_error& err) {
+                        m_error(err.what());
+                    } catch (const std::bad_any_cast& error) {
+                        m_error(error.what());
+                    }
+              });
+        }
+        ~{{value.callee}}() {
+#ifdef __cpp_impl_coroutine
+            if (m_pool_ptr)
+                m_pool_ptr->stop();
+#endif
+        }
+
+        auto& socket() {
+            return m_channel->socket();
+        }
+
+        auto& context() {
+            return m_channel->context();
+        }
+
+        void start() {
+            m_channel->start();
+        }
+
+    static auto create(ChannelConfig& config, 
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
+    }
+
+private:
+    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
+    std::function<void(std::string)> m_error;
+    std::unique_ptr<BiChannel> m_channel;
+    std::mutex m_mtx;
+#ifdef __cpp_impl_coroutine
+    std::unique_ptr<ContextPool> m_pool_ptr;
+#endif
+}; 
+
+} // {{node.property.namespace}}

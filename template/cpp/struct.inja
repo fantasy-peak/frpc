@@ -1,0 +1,22 @@
+
+namespace {{node.property.namespace}} {
+
+struct {{value.struct_name}} {
+	{% for field in value.definitions %}
+		{{field.type}} {{_snake(field.name)}}; // {{field.comment}}
+	{% endfor %}
+
+	MSGPACK_DEFINE({{_join(value.definitions)}})
+};
+
+inline std::string toString(const {{value.struct_name}}& value) {
+	std::string str = "{{value.struct_name}}{";
+	{% for field in value.definitions %}
+		str += toString(value.{{_snake(field.name)}});
+		str += ",";
+	{% endfor %}
+	str += "}";
+	return str;
+}
+
+} // {{node.property.namespace}}

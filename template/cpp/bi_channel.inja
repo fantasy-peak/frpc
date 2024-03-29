@@ -1,0 +1,149 @@
+namespace {{node.property.namespace}} {
+
+class BiChannel final {
+public:
+    BiChannel(const ChannelConfig& config,
+              std::function<void(std::string)> error,
+              std::function<void(std::vector<zmq::message_t>&)> cb)
+        : m_context(config.io_threads)
+        , m_socket(m_context, config.socktype)
+        , m_send(m_context, zmq::socket_type::push)
+        , m_recv(m_context, zmq::socket_type::pull)
+        , m_error(std::move(error))
+        , m_cb(std::move(cb)) {
+        m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_socket.set(zmq::sockopt::linger, config.linger);
+        if (config.tcp_keepalive) {
+            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
+            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+        }
+        if (config.probe) {
+            m_socket.set(zmq::sockopt::probe_router, 1);
+        }
+        if (config.bind) {
+            if (config.socktype == zmq::socket_type::router) {
+                if (config.mandatory)
+                    m_socket.set(zmq::sockopt::router_mandatory, 0);
+                else
+                    m_socket.set(zmq::sockopt::router_mandatory, 1);
+            }
+            m_socket.bind(config.addr);
+        } else {
+            m_socket.connect(config.addr);
+        }
+        auto addr = uniqueAddr();
+        m_recv.set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_recv.set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_recv.bind(addr);
+
+        m_send.set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_send.set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_send.set(zmq::sockopt::linger, config.linger);
+
+        m_send.connect(addr);
+    }
+    ~BiChannel() {
+        m_running = false;
+        if (m_thread.joinable())
+            m_thread.join();
+    }
+
+    template <typename T>
+    void send(T&& snd_msgs) {
+        std::lock_guard lk(m_mutex);
+        if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
+            m_error("send error!!!");
+        }
+    }
+
+    template <typename T>
+    void send(T&& snd_msgs,
+        std::chrono::milliseconds timeout,
+        std::function<void()> cb) {
+        std::lock_guard lk(m_mutex);
+        if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
+            m_error("send error!!!");
+        }
+        auto timeout_point = std::chrono::system_clock::now() + timeout;
+        m_timeout_task.emplace(timeout_point, std::move(cb));
+    }
+
+    void start() {
+        m_running = true;
+        m_thread = std::thread([this] {
+            std::vector<zmq::pollitem_t> items{
+                {static_cast<void*>(m_socket), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
+                {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
+            };
+            std::chrono::milliseconds interval(200);
+            std::multimap<std::chrono::system_clock::time_point, std::function<void()>> timeout_task;
+            while (m_running.load()) {
+                zmq::poll(items, interval);
+                if (items[0].revents & ZMQ_POLLIN) {
+                    std::vector<zmq::message_t> recv_msgs;
+                    auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
+                    if (!ret) {
+                        m_error("zmq::recv_multipart error!!!");
+                        break;
+                    }
+                    m_cb(recv_msgs);
+                }
+                if (items[1].revents & ZMQ_POLLIN) {
+                    try {
+                        std::vector<zmq::message_t> recv_msgs;
+                        auto ret = zmq::recv_multipart(m_recv, std::back_inserter(recv_msgs));
+                        if (!ret) {
+                            m_error("recv zmq::recv_multipart error!!!");
+                            break;
+                        }
+                        if (!zmq::send_multipart(m_socket, recv_msgs)) {
+                            m_error("zmq::send_multipart error!!!");
+                            break;
+                        }
+                    } catch (const zmq::error_t& e) {
+                        m_error(std::string{"BiChannel error "} + e.what());
+                    }
+                }
+                {
+                    std::lock_guard<std::mutex> lk(m_mutex);
+                    if (!m_timeout_task.empty()) {
+                        timeout_task.merge(m_timeout_task);
+                        m_timeout_task.clear();
+                    }
+                }
+                auto now = std::chrono::system_clock::now();
+                while (!timeout_task.empty() && timeout_task.begin()->first <= now) {
+                    (timeout_task.begin()->second)();
+                    timeout_task.erase(timeout_task.begin());
+                }
+            }
+        });
+    }
+
+    auto& socket() {
+        return m_socket;
+    }
+
+    auto& context() {
+        return m_context;
+    }
+
+private:
+    zmq::context_t m_context;
+    zmq::socket_t m_socket;
+    zmq::socket_t m_send;
+    zmq::socket_t m_recv;
+    std::function<void(std::string)> m_error;
+    std::function<void(std::vector<zmq::message_t>&)> m_cb;
+    std::thread m_thread;
+    std::atomic_bool m_running{false};
+    std::mutex m_mutex;
+    std::multimap<std::chrono::system_clock::time_point, std::function<void()>> m_timeout_task;
+};
+
+} // {{node.property.namespace}}

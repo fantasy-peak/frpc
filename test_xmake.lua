@@ -1,0 +1,36 @@
+set_project("brpc")
+set_version("0.0.1", {build = "%Y%m%d%H%M"})
+set_xmakever("2.8.5")
+
+add_repositories("my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
+
+add_requires("spdlog", "asio")
+add_requires("cppzmq", {system = false})
+
+set_policy("check.auto_ignore_flags", false)
+add_cxflags("-O2 -Wall -Wextra -pedantic-errors -Wno-missing-field-initializers -Wno-ignored-qualifiers")
+add_includedirs("./out")
+
+target("cpp17")
+    set_languages("c++17")
+    set_kind("binary")
+    add_files("test/cpp/main.cpp")
+    add_packages("cppzmq", "spdlog", "asio")
+    add_syslinks("pthread", "uuid")
+target_end()
+
+target("cpp20")
+    set_languages("c++20")
+    set_kind("binary")
+    add_files("test/cpp/main.cpp")
+    add_packages("cppzmq", "spdlog", "asio")
+    add_syslinks("pthread", "uuid")
+target_end()
+
+target("cpp23")
+    set_languages("c++23")
+    set_kind("binary")
+    add_files("test/cpp/main.cpp")
+    add_packages("cppzmq", "spdlog", "asio")
+    add_syslinks("pthread", "uuid")
+target_end()

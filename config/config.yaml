@@ -1,0 +1,70 @@
+property:
+  filename: frpc.hpp
+  namespace: frpc
+
+TestType:
+  type: enum
+  value_type: i32
+  definitions:
+    EnumOne: { default: 0, comment: "zero" }
+    EnumTwo: { default: 1, comment: "one" }
+
+Info:
+  type: struct
+  definitions:
+    Name: { type: string, comment: "test Name" }
+
+BankInfo:
+  type: struct
+  definitions:
+    Name: { type: string, comment: "test Name" }
+    Type: { type: TestType, comment: "test Type" }
+    TestOne: { type: i32, comment: "test 1" }
+    TestTwo: { type: u32, comment: "test 2" }
+    TestMapOne: { type: map<string;TestType>, comment: "test map" }
+    TestMap: { type: map<bool;u32>, comment: "test map" }
+    TestVector: { type: vector<string>, comment: "test map" }
+    Info: { type: Info, comment: "Info" }
+
+HelloWorldApi:
+  type: interface
+  pattern: bi
+  caller: HelloWorldClient
+  callee: HelloWorldServer
+  definitions:
+    hello_world:
+      inputs:
+        bank_info: {type: BankInfo}
+        bank_name: {type: string}
+        blance: {type: u64}
+      outputs:
+        reply: {type: string}
+        info: {type: Info}
+        count: {type: u64}
+
+UniInterface:
+  type: interface
+  pattern: uni
+  caller: HelloWorldSender
+  callee: HelloWorldReceiver
+  definitions:
+    hello_world:
+      inputs:
+        in: {type: string}
+    notice:
+      inputs:
+        in: {type: i32}
+        info: {type: string}
+
+Stream:
+  type: interface
+  pattern: bi_stream
+  caller: StreamClient
+  callee: StreamServer
+  definitions:
+    hello_world:
+      inputs:
+        bank_name: {type: string}
+      outputs:
+        reply: {type: string}
+
