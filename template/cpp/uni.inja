@@ -82,7 +82,6 @@ public:
         }
 
         void start() {
-            m_channel->subscribe("");
             m_channel->start();
         }
 
@@ -97,7 +96,10 @@ public:
         static auto create(ChannelConfig& config,
                             std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
                             std::function<void(std::string)> error) {
-            config.socktype = zmq::socket_type::sub;
+            if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+                config.socktype = zmq::socket_type::sub;
+            if (config.socktype == zmq::socket_type::sub)
+                config.bind = false;
             return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
         }
 
@@ -167,7 +169,10 @@ public:
                 m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
                 m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
             }
-            m_socket.bind(config.addr);
+            if (config.bind)
+                m_socket.bind(config.addr);
+            else
+                m_socket.connect(config.addr);
         }
 
         {{value.caller}}(const ChannelConfig& config,
@@ -180,13 +185,19 @@ public:
                 m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
                 m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
             }
-            m_socket.bind(config.addr);
+            if (config.bind)
+                m_socket.bind(config.addr);
+            else
+                m_socket.connect(config.addr);
         }
 
         ~{{value.caller}}() {}
 
         static auto create(ChannelConfig& config) {
-            config.socktype = zmq::socket_type::pub;
+            if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+                config.socktype = zmq::socket_type::pub;
+            if (config.socktype == zmq::socket_type::pub)
+                config.bind = true;
             return std::make_unique<{{value.caller}}>(config);
         }
 

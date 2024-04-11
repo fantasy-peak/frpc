@@ -3,6 +3,7 @@
 #include <functional>
 #include <string>
 #include <tuple>
+#include <zmq.hpp>
 
 #include "frpc.hpp"
 
@@ -63,20 +64,63 @@ struct CoroHelloWorldReceiver : public frpc::CoroHelloWorldReceiverHandler {
 #endif
 
 struct HelloWorldReceiverHandler : public frpc::HelloWorldReceiverHandler {
+    HelloWorldReceiverHandler() = default;
+    HelloWorldReceiverHandler(const std::string& label)
+        : label(label) {
+    }
+
     virtual void hello_world(std::string in) override {
-        spdlog::info("HelloWorldReceiverHandler::hello_world: {}", in);
+        spdlog::info("HelloWorldReceiverHandler::hello_world: {}, {}", label, in);
         return;
     }
     virtual void notice(int32_t in, std::string info) override {
-        spdlog::info("HelloWorldReceiverHandler::notice: {}: {}", in, info);
+        spdlog::info("HelloWorldReceiverHandler::notice: {}, {}: {}", label, in, info);
         return;
     }
+
+    std::string label{"test"};
 };
+
+auto test_push_pull() {
+    start([] {
+        frpc::ChannelConfig pub_config{};
+        pub_config.socktype = zmq::socket_type::push;
+        pub_config.bind = true;
+        pub_config.addr = "tcp://127.0.0.1:5877";
+        auto sender = frpc::HelloWorldSender::create(pub_config);
+        int i = 10;
+        while (i--) {
+            sender->hello_world(std::to_string(i) + "_frpc_push_01");
+            sender->notice(i, "hello world");
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    });
+    frpc::ChannelConfig sub_config{};
+    sub_config.addr = "tcp://127.0.0.1:5877";
+    sub_config.socktype = zmq::socket_type::pull;
+    sub_config.bind = false;
+    auto receiver = frpc::HelloWorldReceiver::create(
+        sub_config,
+        std::make_shared<HelloWorldReceiverHandler>("pull-01"),
+        [](auto error) {
+            spdlog::error("{}", error);
+        });
+    receiver->start();
+    auto receiver1 = frpc::HelloWorldReceiver::create(
+        sub_config,
+        std::make_shared<HelloWorldReceiverHandler>("pull-02"),
+        [](auto error) {
+            spdlog::error("{}", error);
+        });
+    receiver1->start();
+    std::this_thread::sleep_for(std::chrono::seconds(15));
+}
 
 auto test_pub_sub() {
     start([] {
         frpc::ChannelConfig pub_config{};
         pub_config.addr = "tcp://127.0.0.1:5877";
+        pub_config.socktype = zmq::socket_type::pub;
         auto sender = frpc::HelloWorldSender::create(pub_config);
         int i = 10;
         while (i--) {
@@ -87,6 +131,7 @@ auto test_pub_sub() {
     });
 
     frpc::ChannelConfig sub_config{};
+    sub_config.socktype = zmq::socket_type::sub;
     sub_config.addr = "tcp://127.0.0.1:5877";
     auto receiver = frpc::HelloWorldReceiver::create(
         sub_config,
@@ -214,7 +259,7 @@ struct CoroStreamServerHandler : public frpc::CoroStreamServerHandler {
                                               std::shared_ptr<frpc::Stream<void(std::string)>> outs) {
         start([outs = std::move(outs)]() mutable {
             for (int i = 0; i < 5; i++) {
-                outs->operator()(std::string("stream_server_") +  std::to_string(i));
+                outs->operator()(std::string("stream_server_") + std::to_string(i));
                 std::this_thread::sleep_for(std::chrono::seconds(1));
             }
             outs->close();
@@ -277,7 +322,11 @@ void test_coro_stream(auto& pool) {
 #endif
 
 int main() {
+    spdlog::info("----------------test_push_pull--------------------------");
+    test_push_pull();
+    spdlog::info("----------------test_pub_sub----------------------------");
     auto [receiver, monitor] = test_pub_sub();
+    std::this_thread::sleep_for(std::chrono::seconds(10));
     test_bi();
     std::this_thread::sleep_for(std::chrono::seconds(10));
     spdlog::info("----------------test coro--------------------------");

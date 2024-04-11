@@ -20,7 +20,12 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.connect(config.addr);
+        if (config.socktype == zmq::socket_type::sub)
+            m_socket.set(zmq::sockopt::subscribe, "");
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     UniChannel(std::shared_ptr<zmq::context_t> context,
@@ -42,17 +47,18 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.connect(config.addr);
+        if (config.socktype == zmq::socket_type::sub)
+            m_socket.set(zmq::sockopt::subscribe, "");
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     ~UniChannel() {
         m_running = false;
         if (m_thread.joinable())
             m_thread.join();
-    }
-
-    void subscribe(const std::string& topic = "") {
-        m_socket.set(zmq::sockopt::subscribe, topic);
     }
 
     void start() {

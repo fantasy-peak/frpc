@@ -493,7 +493,12 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.connect(config.addr);
+        if (config.socktype == zmq::socket_type::sub)
+            m_socket.set(zmq::sockopt::subscribe, "");
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     UniChannel(std::shared_ptr<zmq::context_t> context,
@@ -515,17 +520,18 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.connect(config.addr);
+        if (config.socktype == zmq::socket_type::sub)
+            m_socket.set(zmq::sockopt::subscribe, "");
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     ~UniChannel() {
         m_running = false;
         if (m_thread.joinable())
             m_thread.join();
-    }
-
-    void subscribe(const std::string& topic = "") {
-        m_socket.set(zmq::sockopt::subscribe, topic);
     }
 
     void start() {
@@ -1035,7 +1041,6 @@ public:
     }
 
     void start() {
-        m_channel->subscribe("");
         m_channel->start();
     }
 
@@ -1050,7 +1055,10 @@ public:
     static auto create(ChannelConfig& config,
                        std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
                        std::function<void(std::string)> error) {
-        config.socktype = zmq::socket_type::sub;
+        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+            config.socktype = zmq::socket_type::sub;
+        if (config.socktype == zmq::socket_type::sub)
+            config.bind = false;
         return std::make_unique<HelloWorldReceiver>(config, std::move(handler), std::move(error));
     }
 
@@ -1140,7 +1148,10 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.bind(config.addr);
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     HelloWorldSender(const ChannelConfig& config,
@@ -1153,14 +1164,20 @@ public:
             m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
             m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
         }
-        m_socket.bind(config.addr);
+        if (config.bind)
+            m_socket.bind(config.addr);
+        else
+            m_socket.connect(config.addr);
     }
 
     ~HelloWorldSender() {
     }
 
     static auto create(ChannelConfig& config) {
-        config.socktype = zmq::socket_type::pub;
+        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+            config.socktype = zmq::socket_type::pub;
+        if (config.socktype == zmq::socket_type::pub)
+            config.bind = true;
         return std::make_unique<HelloWorldSender>(config);
     }
 
