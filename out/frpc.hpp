@@ -1340,16 +1340,16 @@ private:
 };
 
 struct StreamServerHandler {
-    virtual void hello_world(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>&,
+    virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
                              std::shared_ptr<Stream<void(std::string)>>) = 0;
 };
 
 struct CoroStreamServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>&,
+    virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
                                               std::shared_ptr<Stream<void(std::string)>>) = 0;
 #else
-    virtual void hello_world(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>&,
+    virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
                              std::shared_ptr<Stream<void(std::string)>>) = 0;
 #endif
 };
@@ -1442,22 +1442,26 @@ private:
                         snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
                         m_channel->send(snd_bufs);
                     },
-                                                                           [ptr, this] {
+                                                                           [ptr, this, req_id, channel_ptr]() mutable {
                                                                                auto& recv_bufs = *ptr;
-                                                                               auto close = pack<bool>(true);
                                                                                std::vector<zmq::message_t> snd_bufs;
                                                                                snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
                                                                                snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
-                                                                               snd_bufs.emplace_back(zmq::message_t(close.data(), close.size()));
+                                                                               snd_bufs.emplace_back(zmq::message_t("C", 1));
                                                                                m_channel->send(snd_bufs);
+                                                                               channel_ptr->close();
+                                                                               {
+                                                                                   std::lock_guard lk(m_mtx);
+                                                                                   m_channel_mapping.erase(req_id);
+                                                                               }
                                                                            });
                     std::visit([&](auto&& arg) mutable {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<StreamServerHandler>>) {
-                            arg->hello_world(channel_ptr, std::move(out));
+                            arg->hello_world(std::move(channel_ptr), std::move(out));
                         } else {
                             asio::co_spawn(m_pool_ptr->getIoContext(), [](auto& arg, auto channel_ptr, auto out) mutable -> asio::awaitable<void> {
-                                co_await arg->hello_world(channel_ptr, std::move(out));
+                                co_await arg->hello_world(std::move(channel_ptr), std::move(out));
                                 co_return;
                             }(arg, std::move(channel_ptr), std::move(out)),
                                            asio::detached);

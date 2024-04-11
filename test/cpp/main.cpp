@@ -255,7 +255,7 @@ void test_coro_bi(auto& pool) {
 #ifdef __cpp_impl_coroutine
 
 struct CoroStreamServerHandler : public frpc::CoroStreamServerHandler {
-    virtual asio::awaitable<void> hello_world(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>& ins,
+    virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>> ins,
                                               std::shared_ptr<frpc::Stream<void(std::string)>> outs) {
         start([outs = std::move(outs)]() mutable {
             for (int i = 0; i < 5; i++) {
@@ -267,6 +267,10 @@ struct CoroStreamServerHandler : public frpc::CoroStreamServerHandler {
         });
         for (;;) {
             auto [ec, str] = co_await ins->async_receive(asio::as_tuple(asio::use_awaitable));
+            if (ec) {
+                spdlog::info("stream server: {}", ec.message());
+                break;
+            }
             spdlog::info("stream server recv: {}", str);
         }
         co_return;

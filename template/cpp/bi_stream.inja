@@ -137,7 +137,7 @@ private:
 
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
-    virtual void {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
     {% endfor %}
 };
@@ -145,10 +145,10 @@ struct {{value.callee}}Handler {
 struct Coro{{value.callee}}Handler {
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+    virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
 #else
-    virtual void {{func.func_name}}(const std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>&, 
+    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
 #endif
     {% endfor %}
@@ -240,23 +240,27 @@ private:
                         snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
                         snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
                         m_channel->send(snd_bufs);
-                    }, [ptr, this] {
+                    }, [ptr, this, req_id, channel_ptr] () mutable {
                         auto& recv_bufs = *ptr;
-                        auto close = pack<bool>(true);
                         std::vector<zmq::message_t> snd_bufs;
                         snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
                         snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
-                        snd_bufs.emplace_back(zmq::message_t(close.data(), close.size()));
+                        snd_bufs.emplace_back(zmq::message_t("C", 1));
                         m_channel->send(snd_bufs);
+                        channel_ptr->close();
+                        {
+                            std::lock_guard lk(m_mtx);
+                            m_channel_mapping.erase(req_id);
+                        }
                     });
                     std::visit([&](auto&& arg) mutable {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
-                            arg->{{func.func_name}}(channel_ptr, std::move(out));
+                            arg->{{func.func_name}}(std::move(channel_ptr), std::move(out));
                         } else {
                             asio::co_spawn(m_pool_ptr->getIoContext(),
                                 [] (auto& arg, auto channel_ptr, auto out) mutable -> asio::awaitable<void> {
-                                    co_await arg->{{func.func_name}}(channel_ptr, std::move(out));
+                                    co_await arg->{{func.func_name}}(std::move(channel_ptr), std::move(out));
                                     co_return;
                                 }(arg, std::move(channel_ptr), std::move(out)),
                                 asio::detached);
