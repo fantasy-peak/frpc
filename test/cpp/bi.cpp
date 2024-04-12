@@ -25,7 +25,7 @@ auto create_bank_info() {
     return bank_info;
 }
 
-struct Handler : public frpc::HelloWorldServerHandler {
+struct Handler final : public frpc::HelloWorldServerHandler {
     virtual void hello_world(frpc::BankInfo bank_info,
                              std::string bank_name,
                              uint64_t blance,

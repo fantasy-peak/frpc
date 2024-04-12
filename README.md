@@ -1,7 +1,7 @@
 # frpc
 *An rpc code generation framework for c++, It supports c++17/20/23*
 
-[![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-gcc13/badge.svg)](https://github.com/fantasy-peak/frpc/actions) 
+[![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-gcc13/badge.svg)](https://github.com/fantasy-peak/frpc/actions) [![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-clang19/badge.svg)](https://github.com/fantasy-peak/frpc/actions)
 
 ## Support this repository:
 
@@ -14,6 +14,7 @@ To get started with this project, you'll need to clone the repository and have g
 To run the application, run the following command:
 
 ```
+* you need install libuuid-devel.x86_64 msgpack-devel.x86_64 cppzmq v4.10.0
 1. Check local g++ version, need g++ version >= gcc version 13.1.0 (GCC)
 2. git clone https://github.com/fantasy-peak/frpc.git
 3. xmake build -v -y

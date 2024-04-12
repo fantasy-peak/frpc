@@ -12,7 +12,7 @@ void start(std::function<void()> func) {
 }
 
 #ifdef __cpp_impl_coroutine
-struct CoroHelloWorldReceiver : public frpc::CoroHelloWorldReceiverHandler {
+struct CoroHelloWorldReceiver final : public frpc::CoroHelloWorldReceiverHandler {
     virtual asio::awaitable<void> hello_world(std::string in) override {
         spdlog::info("CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
@@ -23,7 +23,7 @@ struct CoroHelloWorldReceiver : public frpc::CoroHelloWorldReceiverHandler {
     }
 };
 #else
-struct HelloWorldReceiverHandler : public frpc::HelloWorldReceiverHandler {
+struct HelloWorldReceiverHandler final : public frpc::HelloWorldReceiverHandler {
     HelloWorldReceiverHandler() = default;
     HelloWorldReceiverHandler(const std::string& label)
         : label(label) {

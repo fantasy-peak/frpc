@@ -114,9 +114,10 @@ private:
             switch(req_type) {
             {% for func in value.definitions %}
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
-                    auto [{{_format_args_name(func.inputs)}}] = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
                     std::visit(
                         [&](auto&& arg) {
+                            auto& [{{_format_args_name(func.inputs)}}] = tp;
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
                                 arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}});

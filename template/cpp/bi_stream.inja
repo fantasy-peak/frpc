@@ -62,7 +62,7 @@ public:
                 snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
                 m_channel->send(std::move(snd_bufs));
             },
-            [this] {});
+            [] {});
         auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.outputs)}})>>(
             m_pool_ptr->getIoContext(),
             m_config.channel_size);

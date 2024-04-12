@@ -92,7 +92,7 @@ public:
         return asio::async_initiate<CompletionToken, void({{_format_args_type(func.outputs)}})>(
             [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
-                {{func.func_name}}(
+                this->{{func.func_name}}(
                         {{_format_args_name_and_move(func.inputs)}},
                         [handler_ptr = std::move(handler_ptr)]({{_format_args(func.outputs)}}) mutable {
                             auto ex = asio::get_associated_executor(*handler_ptr);
@@ -110,7 +110,7 @@ public:
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)>(
             [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}, auto timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
-                {{func.func_name}}(
+                this->{{func.func_name}}(
                             {{_format_args_name_and_move(func.inputs)}},
                             [handler_ptr]({{_format_args(func.outputs)}}) mutable {
                                 auto ex = asio::get_associated_executor(*handler_ptr);
@@ -226,14 +226,14 @@ public:
                         {% for func in value.definitions %}
                             case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
                                 auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
-                                auto& [{{_format_args_name(func.inputs)}}] = tp;
-                                std::function<void({{_format_args_type(func.outputs)}})> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)),this] ({{_format_args(func.outputs)}}) mutable {
+                                std::function<void({{_format_args_type(func.outputs)}})> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this] ({{_format_args(func.outputs)}}) mutable {
                                     auto& snd_bufs = *ptr;
                                     auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
                                     snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
                                     m_channel->send(std::move(snd_bufs));
                                 };
                                 std::visit([&](auto&& arg) mutable {
+                                    auto& [{{_format_args_name(func.inputs)}}] = tp;
                                     using T = std::decay_t<decltype(arg)>;
                                     if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
                                         arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));

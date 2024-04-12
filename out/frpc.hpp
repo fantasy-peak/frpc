@@ -762,7 +762,7 @@ public:
         return asio::async_initiate<CompletionToken, void(std::string, Info, uint64_t)>(
             [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
-                hello_world(
+                this->hello_world(
                     std::move(bank_info), std::move(bank_name), blance,
                     [handler_ptr = std::move(handler_ptr)](std::string reply, Info info, uint64_t count) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
@@ -780,7 +780,7 @@ public:
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t>>)>(
             [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, auto timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
-                hello_world(
+                this->hello_world(
                     std::move(bank_info), std::move(bank_name), blance,
                     [handler_ptr](std::string reply, Info info, uint64_t count) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
@@ -885,7 +885,6 @@ public:
                 switch (req_type) {
                     case HelloWorldClientHelloWorldServer::hello_world: {
                         auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t>>(recv_bufs[2].data(), recv_bufs[2].size());
-                        auto& [bank_info, bank_name, blance] = tp;
                         std::function<void(std::string, Info, uint64_t)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count) mutable {
                             auto& snd_bufs = *ptr;
                             auto packet = pack<std::tuple<std::string, Info, uint64_t>>(std::make_tuple(std::move(reply), std::move(info), count));
@@ -893,6 +892,7 @@ public:
                             m_channel->send(std::move(snd_bufs));
                         };
                         std::visit([&](auto&& arg) mutable {
+                            auto& [bank_info, bank_name, blance] = tp;
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
                                 arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
@@ -1083,9 +1083,10 @@ private:
             auto req_type = unpack<HelloWorldSenderHelloWorldReceiver>(recv_bufs[0].data(), recv_bufs[0].size());
             switch (req_type) {
                 case HelloWorldSenderHelloWorldReceiver::hello_world: {
-                    auto [in] = unpack<std::tuple<std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto tp = unpack<std::tuple<std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
                     std::visit(
                         [&](auto&& arg) {
+                            auto& [in] = tp;
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
                                 arg->hello_world(std::move(in));
@@ -1104,9 +1105,10 @@ private:
                     break;
                 }
                 case HelloWorldSenderHelloWorldReceiver::notice: {
-                    auto [in, info] = unpack<std::tuple<int32_t, std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto tp = unpack<std::tuple<int32_t, std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
                     std::visit(
                         [&](auto&& arg) {
+                            auto& [in, info] = tp;
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
                                 arg->notice(in, std::move(info));
@@ -1278,7 +1280,7 @@ public:
                 snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
                 m_channel->send(std::move(snd_bufs));
             },
-            [this] {});
+            [] {});
         auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>(
             m_pool_ptr->getIoContext(),
             m_config.channel_size);

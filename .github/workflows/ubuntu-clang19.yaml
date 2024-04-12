@@ -1,0 +1,48 @@
+name: ubuntu-clang19
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+
+    steps:
+      - name: Installation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev p7zip gobjc g++-13 wget sudo libmsgpack-dev/jammy
+          sudo apt install lsb-release wget software-properties-common gnupg -y
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main"
+          sudo apt update
+          sudo apt list | grep clang
+          sudo apt install clang-19 -y
+
+      - uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: v2.8.9
+
+      - name: checkout
+        uses: actions/checkout@v3
+      - name: build
+        run: |
+          export XMAKE_ROOT="y"
+          g++-13 -v
+          export CXX=clang++-19
+          export CC=clang-19
+          xmake build -y
+          xmake install -o .
+
+      - name: build test
+        run: |
+          ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out
+          xmake build -v -y --file=./test_xmake.lua
+          xmake install -o . --file=./test_xmake.lua
