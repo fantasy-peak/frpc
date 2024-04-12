@@ -828,9 +828,11 @@ private:
                 default:
                     m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
         } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
             m_error(error.what());
         }
     }
@@ -889,12 +891,12 @@ public:
                                 arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
                             } else {
 #ifdef __cpp_impl_coroutine
-                                asio::co_spawn(m_pool_ptr->getIoContext(), [](auto& arg, auto tp, auto out) mutable -> asio::awaitable<void> {
-                                    auto& [bank_info, bank_name, blance] = tp;
-                                    co_await arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
-                                    co_return;
-                                }(arg, std::move(tp), std::move(out)),
-                                               asio::detached);
+                                asio::co_spawn(
+                                    m_pool_ptr->getIoContext(),
+                                    arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out)),
+                                    asio::detached);
+#else
+                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
 #endif
                             }
                         },
@@ -904,9 +906,11 @@ public:
                     default:
                         m_error("error type");
                 }
-            } catch (const msgpack::type_error& err) {
-                m_error(err.what());
+            } catch (const msgpack::type_error& error) {
+                m_error(error.what());
             } catch (const std::bad_any_cast& error) {
+                m_error(error.what());
+            } catch (const std::exception& error) {
                 m_error(error.what());
             }
         });
@@ -1082,11 +1086,10 @@ private:
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
-                                    [](auto& arg, std::string in) mutable -> asio::awaitable<void> {
-                                        co_await arg->hello_world(std::move(in));
-                                        co_return;
-                                    }(arg, std::move(in)),
+                                    arg->hello_world(std::move(in)),
                                     asio::detached);
+#else
+                                arg->hello_world(std::move(in));
 #endif
                             }
                         },
@@ -1104,11 +1107,10 @@ private:
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
-                                    [](auto& arg, int32_t in, std::string info) mutable -> asio::awaitable<void> {
-                                        co_await arg->notice(in, std::move(info));
-                                        co_return;
-                                    }(arg, in, std::move(info)),
+                                    arg->notice(in, std::move(info)),
                                     asio::detached);
+#else
+                                arg->notice(in, std::move(info));
 #endif
                             }
                         },
@@ -1118,15 +1120,16 @@ private:
                 default:
                     m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 
     std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<UniChannel> m_channel;
-    std::mutex m_mtx;
 #ifdef __cpp_impl_coroutine
     std::unique_ptr<ContextPool> m_pool_ptr;
 #endif
@@ -1326,6 +1329,8 @@ private:
             m_error(error.what());
         } catch (const std::bad_any_cast& error) {
             m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 
@@ -1460,11 +1465,10 @@ private:
                         if constexpr (std::is_same_v<T, std::shared_ptr<StreamServerHandler>>) {
                             arg->hello_world(std::move(channel_ptr), std::move(out));
                         } else {
-                            asio::co_spawn(m_pool_ptr->getIoContext(), [](auto& arg, auto channel_ptr, auto out) mutable -> asio::awaitable<void> {
-                                co_await arg->hello_world(std::move(channel_ptr), std::move(out));
-                                co_return;
-                            }(arg, std::move(channel_ptr), std::move(out)),
-                                           asio::detached);
+                            asio::co_spawn(
+                                m_pool_ptr->getIoContext(),
+                                arg->hello_world(std::move(channel_ptr), std::move(out)),
+                                asio::detached);
                         }
                     },
                                m_handler);
@@ -1473,8 +1477,12 @@ private:
                 default:
                     m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
+        } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 

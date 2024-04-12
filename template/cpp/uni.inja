@@ -124,11 +124,10 @@ private:
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
-                                    [] (auto& arg, {{_format_args(func.inputs)}}) mutable -> asio::awaitable<void> {
-                                        co_await arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}});
-                                        co_return;
-                                    }(arg, {{_format_args_name_and_move(func.inputs)}}),
+                                    arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}),
                                     asio::detached);
+#else
+                                arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}});
 #endif
                             }
                         },
@@ -139,15 +138,16 @@ private:
             default:
                 m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 
     std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<UniChannel> m_channel;
-    std::mutex m_mtx;
 #ifdef __cpp_impl_coroutine
     std::unique_ptr<ContextPool> m_pool_ptr;
 #endif

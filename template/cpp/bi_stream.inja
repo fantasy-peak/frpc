@@ -122,6 +122,8 @@ private:
             m_error(error.what());
         } catch (const std::bad_any_cast& error) {
             m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 
@@ -258,11 +260,9 @@ private:
                         if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
                             arg->{{func.func_name}}(std::move(channel_ptr), std::move(out));
                         } else {
-                            asio::co_spawn(m_pool_ptr->getIoContext(),
-                                [] (auto& arg, auto channel_ptr, auto out) mutable -> asio::awaitable<void> {
-                                    co_await arg->{{func.func_name}}(std::move(channel_ptr), std::move(out));
-                                    co_return;
-                                }(arg, std::move(channel_ptr), std::move(out)),
+                            asio::co_spawn(
+                                m_pool_ptr->getIoContext(),
+                                arg->{{func.func_name}}(std::move(channel_ptr), std::move(out)),
                                 asio::detached);
                         }
                     },
@@ -273,8 +273,12 @@ private:
             default:
                 m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
+        } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
+            m_error(error.what());
         }
     }
 

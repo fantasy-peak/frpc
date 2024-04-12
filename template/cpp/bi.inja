@@ -170,9 +170,11 @@ private:
             default:
                 m_error("error type");
             }
-        } catch (const msgpack::type_error& err) {
-            m_error(err.what());
+        } catch (const msgpack::type_error& error) {
+            m_error(error.what());
         } catch (const std::bad_any_cast& error) {
+            m_error(error.what());
+        } catch (const std::exception& error) {
             m_error(error.what());
         }
     }
@@ -237,13 +239,12 @@ public:
                                         arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
                                     } else {
 #ifdef __cpp_impl_coroutine
-                                        asio::co_spawn(m_pool_ptr->getIoContext(),
-                                            [] (auto& arg, auto tp, auto out) mutable -> asio::awaitable<void> {
-                                                auto& [{{_format_args_name(func.inputs)}}] = tp;
-                                                co_await arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
-                                                co_return;
-                                            }(arg, std::move(tp), std::move(out)),
+                                        asio::co_spawn(
+                                            m_pool_ptr->getIoContext(),
+                                            arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out)),
                                             asio::detached);
+#else
+                                        arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
 #endif
                                     }
                                 },
@@ -254,9 +255,11 @@ public:
                         default:
                             m_error("error type");
                         }
-                    } catch (const msgpack::type_error& err) {
-                        m_error(err.what());
+                    } catch (const msgpack::type_error& error) {
+                        m_error(error.what());
                     } catch (const std::bad_any_cast& error) {
+                        m_error(error.what());
+                    } catch (const std::exception& error) {
                         m_error(error.what());
                     }
               });
