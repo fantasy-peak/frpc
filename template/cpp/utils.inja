@@ -1,5 +1,7 @@
 namespace {{node.property.namespace}} {
 
+#define FRPC_ERROR_FORMAT(message) [] (const std::string& info) { std::stringstream ss; ss << __FILE__ << ":" << __LINE__ << " " << info ; return ss.str(); } (message)
+
 template <class TObject>
 inline msgpack::sbuffer pack(const TObject& object) {
     msgpack::sbuffer buffer;

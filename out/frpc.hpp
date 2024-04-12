@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <typeinfo>
@@ -70,6 +71,12 @@ private:
 #endif
 
 namespace frpc {
+
+#define FRPC_ERROR_FORMAT(message) [](const std::string& info) { \
+    std::stringstream ss;                                        \
+    ss << __FILE__ << ":" << __LINE__ << " " << info;            \
+    return ss.str();                                             \
+}(message)
 
 template <class TObject>
 inline msgpack::sbuffer pack(const TObject& object) {
@@ -380,7 +387,7 @@ public:
     void send(T&& snd_msgs) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error("send error!!!");
+            m_error(FRPC_ERROR_FORMAT("send error!!!"));
         }
     }
 
@@ -390,7 +397,7 @@ public:
               std::function<void()> cb) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error("send error!!!");
+            m_error(FRPC_ERROR_FORMAT("send error!!!"));
         }
         auto timeout_point = std::chrono::system_clock::now() + timeout;
         m_timeout_task.emplace(timeout_point, std::move(cb));
@@ -411,7 +418,7 @@ public:
                     std::vector<zmq::message_t> recv_msgs;
                     auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
                     if (!ret) {
-                        m_error("zmq::recv_multipart error!!!");
+                        m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
                         break;
                     }
                     m_cb(recv_msgs);
@@ -421,15 +428,15 @@ public:
                         std::vector<zmq::message_t> recv_msgs;
                         auto ret = zmq::recv_multipart(m_recv, std::back_inserter(recv_msgs));
                         if (!ret) {
-                            m_error("recv zmq::recv_multipart error!!!");
+                            m_error(FRPC_ERROR_FORMAT("recv zmq::recv_multipart error!!!"));
                             break;
                         }
                         if (!zmq::send_multipart(m_socket, recv_msgs)) {
-                            m_error("zmq::send_multipart error!!!");
+                            m_error(FRPC_ERROR_FORMAT("zmq::send_multipart error!!!"));
                             break;
                         }
                     } catch (const zmq::error_t& e) {
-                        m_error(std::string{"BiChannel error "} + e.what());
+                        m_error(FRPC_ERROR_FORMAT(std::string{"BiChannel error "} + e.what()));
                     }
                 }
                 {
@@ -547,7 +554,7 @@ public:
                     std::vector<zmq::message_t> recv_msgs;
                     auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
                     if (!ret) {
-                        m_error("zmq::recv_multipart error!!!");
+                        m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
                         break;
                     }
                     m_cb(recv_msgs);
@@ -802,7 +809,7 @@ public:
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
-            m_error("Illegal response packet");
+            m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
             return;
         }
         try {
@@ -826,14 +833,14 @@ private:
                     break;
                 }
                 default:
-                    m_error("error type");
+                    m_error(FRPC_ERROR_FORMAT("error type"));
             }
         } catch (const msgpack::type_error& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::bad_any_cast& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::exception& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         }
     }
 
@@ -870,7 +877,7 @@ public:
 #endif
         m_channel = std::make_unique<BiChannel>(config, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
             if (recv_bufs.size() != 3) {
-                m_error("BiChannel recv illegal request packet");
+                m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
                 return;
             }
             try {
@@ -904,14 +911,14 @@ public:
                         break;
                     }
                     default:
-                        m_error("error type");
+                        m_error(FRPC_ERROR_FORMAT("error type"));
                 }
             } catch (const msgpack::type_error& error) {
-                m_error(error.what());
+                m_error(FRPC_ERROR_FORMAT(error.what()));
             } catch (const std::bad_any_cast& error) {
-                m_error(error.what());
+                m_error(FRPC_ERROR_FORMAT(error.what()));
             } catch (const std::exception& error) {
-                m_error(error.what());
+                m_error(FRPC_ERROR_FORMAT(error.what()));
             }
         });
     }
@@ -1069,7 +1076,7 @@ public:
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
-            m_error("Illegal response packet");
+            m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
             return;
         }
         try {
@@ -1118,12 +1125,12 @@ private:
                     break;
                 }
                 default:
-                    m_error("error type");
+                    m_error(FRPC_ERROR_FORMAT("error type"));
             }
         } catch (const msgpack::type_error& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::exception& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         }
     }
 
@@ -1279,7 +1286,7 @@ public:
             std::function<void(std::tuple<std::string>)> func = [channel_ptr, this](std::tuple<std::string> tp) mutable {
                 auto& [reply] = tp;
                 if (!channel_ptr->try_send(asio::error_code{}, std::move(reply)))
-                    m_error("Failed to store message to channel!!!");
+                    m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
             };
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(func));
@@ -1298,7 +1305,7 @@ public:
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
-            m_error("client recv invalid stream server response packets!!!");
+            m_error(FRPC_ERROR_FORMAT("client recv invalid stream server response packets!!!"));
             return;
         }
         try {
@@ -1323,14 +1330,14 @@ private:
                     break;
                 }
                 default:
-                    m_error("error type");
+                    m_error(FRPC_ERROR_FORMAT("error type"));
             }
         } catch (const msgpack::type_error& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::bad_any_cast& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::exception& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         }
     }
 
@@ -1401,7 +1408,7 @@ public:
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 3) {
-            m_error("server recv invalid stream client request packets!!!");
+            m_error(FRPC_ERROR_FORMAT("server recv invalid stream client request packets!!!"));
             return;
         }
         try {
@@ -1416,7 +1423,7 @@ private:
                         if (m_channel_mapping.contains(req_id)) {
                             channel_ptr = std::any_cast<decltype(channel_ptr)>(m_channel_mapping[req_id]);
                             if (!channel_ptr->try_send(asio::error_code{}, std::move(bank_name)))
-                                m_error("Failed to store message to channel!!!");
+                                m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
                             return;
                         }
                         channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>(
@@ -1425,7 +1432,7 @@ private:
                         m_channel_mapping[req_id] = channel_ptr;
                     }
                     if (!channel_ptr->try_send(asio::error_code{}, std::move(bank_name)))
-                        m_error("Failed to store message to channel!!!");
+                        m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
 
                     auto is_open = std::make_tuple(req_id, req_type, false);
                     auto is_open_buffer = pack<decltype(is_open)>(is_open);
@@ -1475,14 +1482,14 @@ private:
                     break;
                 }
                 default:
-                    m_error("error type");
+                    m_error(FRPC_ERROR_FORMAT("error type"));
             }
         } catch (const msgpack::type_error& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::bad_any_cast& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::exception& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         }
     }
 

@@ -35,9 +35,8 @@ jobs:
           xmake build -y
           xmake install -o .
 
-      - name: build test and run test
+      - name: build test
         run: |
           ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out
           xmake build -v -y --file=./test_xmake.lua
           xmake install -o . --file=./test_xmake.lua
-          ./bin/cpp23

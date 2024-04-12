@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <any>
 #include <mutex>
+#include <sstream>
 #ifdef __cpp_impl_coroutine
 #include <coroutine>
 #endif

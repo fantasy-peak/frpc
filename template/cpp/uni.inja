@@ -106,7 +106,7 @@ public:
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
-            m_error("Illegal response packet");
+            m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
             return;
         }
         try {
@@ -136,12 +136,12 @@ private:
                 }
             {% endfor %}
             default:
-                m_error("error type");
+                m_error(FRPC_ERROR_FORMAT("error type"));
             }
         } catch (const msgpack::type_error& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         } catch (const std::exception& error) {
-            m_error(error.what());
+            m_error(FRPC_ERROR_FORMAT(error.what()));
         }
     }
 

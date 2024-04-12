@@ -57,7 +57,7 @@ public:
     void send(T&& snd_msgs) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error("send error!!!");
+            m_error(FRPC_ERROR_FORMAT("send error!!!"));
         }
     }
 
@@ -67,7 +67,7 @@ public:
         std::function<void()> cb) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error("send error!!!");
+            m_error(FRPC_ERROR_FORMAT("send error!!!"));
         }
         auto timeout_point = std::chrono::system_clock::now() + timeout;
         m_timeout_task.emplace(timeout_point, std::move(cb));
@@ -88,7 +88,7 @@ public:
                     std::vector<zmq::message_t> recv_msgs;
                     auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
                     if (!ret) {
-                        m_error("zmq::recv_multipart error!!!");
+                        m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
                         break;
                     }
                     m_cb(recv_msgs);
@@ -98,15 +98,15 @@ public:
                         std::vector<zmq::message_t> recv_msgs;
                         auto ret = zmq::recv_multipart(m_recv, std::back_inserter(recv_msgs));
                         if (!ret) {
-                            m_error("recv zmq::recv_multipart error!!!");
+                            m_error(FRPC_ERROR_FORMAT("recv zmq::recv_multipart error!!!"));
                             break;
                         }
                         if (!zmq::send_multipart(m_socket, recv_msgs)) {
-                            m_error("zmq::send_multipart error!!!");
+                            m_error(FRPC_ERROR_FORMAT("zmq::send_multipart error!!!"));
                             break;
                         }
                     } catch (const zmq::error_t& e) {
-                        m_error(std::string{"BiChannel error "} + e.what());
+                        m_error(FRPC_ERROR_FORMAT(std::string{"BiChannel error "} + e.what()));
                     }
                 }
                 {
