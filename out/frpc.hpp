@@ -705,11 +705,11 @@ public:
         return m_channel->context();
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::function<void(std::string reply, Info info, uint64_t count)> cb) {
+    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
         auto buffer = pack<decltype(header)>(std::move(header));
-        auto packet = pack<std::tuple<BankInfo, std::string, uint64_t>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance));
+        auto packet = pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
 
         std::vector<zmq::message_t> snd_bufs;
         snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
@@ -721,14 +721,14 @@ public:
         m_channel->send(std::move(snd_bufs));
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance,
-                     std::function<void(std::string reply, Info info, uint64_t count)> cb,
+    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date,
+                     std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
                      std::chrono::milliseconds timeout,
                      std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
         auto buffer = pack<decltype(header)>(std::move(header));
-        auto packet = pack<std::tuple<BankInfo, std::string, uint64_t>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance));
+        auto packet = pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
 
         std::vector<zmq::message_t> snd_bufs;
         snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
@@ -757,35 +757,35 @@ public:
                         });
     }
 #ifdef __cpp_impl_coroutine
-    template <asio::completion_token_for<void(std::string, Info, uint64_t)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, CompletionToken&& token) {
-        return asio::async_initiate<CompletionToken, void(std::string, Info, uint64_t)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance) mutable {
+    template <asio::completion_token_for<void(std::string, Info, uint64_t, std::optional<std::string>)> CompletionToken>
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, CompletionToken&& token) {
+        return asio::async_initiate<CompletionToken, void(std::string, Info, uint64_t, std::optional<std::string>)>(
+            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance,
-                    [handler_ptr = std::move(handler_ptr)](std::string reply, Info info, uint64_t count) mutable {
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    [handler_ptr = std::move(handler_ptr)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
-                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, handler_ptr = std::move(handler_ptr)]() mutable -> void {
-                            (*handler_ptr)(std::move(reply), std::move(info), count);
+                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
+                            (*handler_ptr)(std::move(reply), std::move(info), count, std::move(date));
                         });
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance);
+            std::move(bank_info), std::move(bank_name), blance, std::move(date));
     }
 
-    template <asio::completion_token_for<void(std::optional<std::tuple<std::string, Info, uint64_t>>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::chrono::milliseconds timeout, CompletionToken&& token) {
-        return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t>>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, auto timeout) mutable {
+    template <asio::completion_token_for<void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)> CompletionToken>
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::chrono::milliseconds timeout, CompletionToken&& token) {
+        return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)>(
+            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, auto timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance,
-                    [handler_ptr](std::string reply, Info info, uint64_t count) mutable {
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    [handler_ptr](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
-                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, handler_ptr = std::move(handler_ptr)]() mutable -> void {
-                            (*handler_ptr)(std::make_tuple(std::move(reply), std::move(info), count));
+                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
+                            (*handler_ptr)(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                         });
                     },
                     std::move(timeout),
@@ -797,7 +797,7 @@ public:
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(timeout));
+            std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(timeout));
     }
 #endif
 
@@ -816,7 +816,7 @@ private:
             auto [req_id, req_type] = unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[0].data(), recv_bufs[0].size());
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
-                    auto [reply, info, count] = unpack<std::tuple<std::string, Info, uint64_t>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto [reply, info, count, date] = unpack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(recv_bufs[1].data(), recv_bufs[1].size());
                     std::unique_lock lk(m_mtx);
 #if __cplusplus >= 202302L
                     if (!m_cb.contains(req_id))
@@ -828,8 +828,8 @@ private:
                     auto cb = std::move(m_cb[req_id]);
                     m_cb.erase(req_id);
                     lk.unlock();
-                    auto callback = std::any_cast<std::function<void(std::string, Info, uint64_t)>>(cb);
-                    callback(std::move(reply), std::move(info), count);
+                    auto callback = std::any_cast<std::function<void(std::string, Info, uint64_t, std::optional<std::string>)>>(cb);
+                    callback(std::move(reply), std::move(info), count, std::move(date));
                     break;
                 }
                 default:
@@ -853,14 +853,14 @@ private:
 };
 
 struct HelloWorldServerHandler {
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::function<void(std::string, Info, uint64_t)> cb) = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
 };
 
 struct CoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::function<void(std::string, Info, uint64_t)> cb) = 0;
+    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::function<void(std::string, Info, uint64_t)> cb) = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
 #endif
 };
 
@@ -884,26 +884,26 @@ public:
                 auto [req_id, req_type] = unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[1].data(), recv_bufs[1].size());
                 switch (req_type) {
                     case HelloWorldClientHelloWorldServer::hello_world: {
-                        auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t>>(recv_bufs[2].data(), recv_bufs[2].size());
-                        std::function<void(std::string, Info, uint64_t)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count) mutable {
+                        auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(recv_bufs[2].data(), recv_bufs[2].size());
+                        std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                             auto& snd_bufs = *ptr;
-                            auto packet = pack<std::tuple<std::string, Info, uint64_t>>(std::make_tuple(std::move(reply), std::move(info), count));
+                            auto packet = pack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                             snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
                             m_channel->send(std::move(snd_bufs));
                         };
                         std::visit([&](auto&& arg) mutable {
-                            auto& [bank_info, bank_name, blance] = tp;
+                            auto& [bank_info, bank_name, blance, date] = tp;
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
+                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
                             } else {
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
-                                    arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out)),
+                                    arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out)),
                                     asio::detached);
 #else
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(out));
+                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
 #endif
                             }
                         },

@@ -1,4 +1,5 @@
 #include <functional>
+#include <optional>
 #include <string>
 
 #include <spdlog/spdlog.h>
@@ -29,12 +30,13 @@ struct CoroHandler final : public frpc::CoroHelloWorldServerHandler {
     virtual asio::awaitable<void> hello_world(frpc::BankInfo bank_info,
                                               std::string bank_name,
                                               uint64_t blance,
-                                              std::function<void(std::string, frpc::Info, uint64_t)> cb) override {
-        spdlog::info("coro frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}",
-                     frpc::toString(bank_info), bank_name, blance);
+                                              std::optional<std::string> date,
+                                              std::function<void(std::string, frpc::Info, uint64_t, std::optional<std::string>)> cb) override {
+        spdlog::info("coro frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
+                     frpc::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
         frpc::Info info;
         info.name = "coro test";
-        cb("coro hello world", std::move(info), 556);
+        cb("coro hello world", std::move(info), 556, std::nullopt);
         co_return;
     }
 };
@@ -48,13 +50,13 @@ asio::awaitable<void> start_client() {
     client->start();
     spdlog::info("start coro client.");
 
-    auto [reply, info, count] = co_await client->hello_world_coro(create_bank_info(), "HF", 777, asio::as_tuple(asio::use_awaitable));
-    spdlog::info("coro frpc::HelloWorldClient::hello_world recv: {},{},{}", reply, frpc::toString(info), count);
+    auto [reply, info, count, date] = co_await client->hello_world_coro(create_bank_info(), "HF", 777, std::nullopt, asio::as_tuple(asio::use_awaitable));
+    spdlog::info("coro frpc::HelloWorldClient::hello_world recv: {},{},{},{}", reply, frpc::toString(info), count, date.has_value() ? date.value() : "nullopt");
 
-    auto ret = co_await client->hello_world_coro(create_bank_info(), "HF", 666, std::chrono::milliseconds{500}, asio::use_awaitable);
+    auto ret = co_await client->hello_world_coro(create_bank_info(), "HF", 666, std::nullopt, std::chrono::milliseconds{500}, asio::use_awaitable);
     if (ret.has_value()) {
-        auto [reply, info, count] = ret.value();
-        spdlog::info("coro frpc::HelloWorldClient::hello_world recv: {},{},{}", reply, frpc::toString(info), count);
+        auto [reply, info, count, date] = ret.value();
+        spdlog::info("coro frpc::HelloWorldClient::hello_world recv: {},{},{},{}", reply, frpc::toString(info), count, date.has_value() ? date.value() : "nullopt");
         co_return;
     }
     spdlog::error("coro frpc::HelloWorldClient::hello_world timeout");

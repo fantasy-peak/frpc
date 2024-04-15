@@ -29,12 +29,13 @@ struct Handler final : public frpc::HelloWorldServerHandler {
     virtual void hello_world(frpc::BankInfo bank_info,
                              std::string bank_name,
                              uint64_t blance,
-                             std::function<void(std::string, frpc::Info, uint64_t)> cb) override {
-        spdlog::info("frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}",
-                     frpc::toString(bank_info), bank_name, blance);
+                             std::optional<std::string> date,
+                             std::function<void(std::string, frpc::Info, uint64_t, std::optional<std::string>)> cb) override {
+        spdlog::info("frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
+                     frpc::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
         frpc::Info info;
         info.name = "test";
-        cb("hello world", std::move(info), 789);
+        cb("hello world", std::move(info), 789, "2024");
     }
 };
 
@@ -73,16 +74,20 @@ int main() {
         create_bank_info(),
         std::string{"frpc-bank"},
         999,
-        [](std::string reply, frpc::Info info, uint64_t count) {
-            spdlog::info("frpc::HelloWorldClient::hello_world recv: {},{},{}", reply, frpc::toString(info), count);
+        "option",
+        [](std::string reply, frpc::Info info, uint64_t count, std::optional<std::string> date) {
+            spdlog::info("frpc::HelloWorldClient::hello_world recv: {},{},{},{}", reply, frpc::toString(info),
+                         count, date.has_value() ? date.value() : "nullopt");
         });
 
     client->hello_world(
         create_bank_info(),
         std::string{"frpc-bank-1"},
         999,
-        [](std::string reply, frpc::Info info, uint64_t count) {
-            spdlog::info("frpc::HelloWorldClient::hello_world(timeout) recv: {},{},{}", reply, frpc::toString(info), count);
+        "option",
+        [](std::string reply, frpc::Info info, uint64_t count, std::optional<std::string> date) {
+            spdlog::info("frpc::HelloWorldClient::hello_world(timeout) recv: {},{},{},{}", reply, frpc::toString(info), count,
+                         date.has_value() ? date.value() : "nullopt");
         },
         std::chrono::milliseconds(200),
         [] {

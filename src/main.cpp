@@ -56,6 +56,8 @@ std::string toCppType(std::string type) {
     }
     if (type.starts_with("vector"))
         type = std::format("std::vector<{}>", convert(extract(type)));
+    if (type.starts_with("option"))
+        type = std::format("std::optional<{}>", convert(extract(type)));
     return convert(type);
 }
 

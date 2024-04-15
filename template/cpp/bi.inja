@@ -35,7 +35,7 @@ public:
 
     {% for func in value.definitions %}
 
-        void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args(func.outputs)}})> cb) {
+        void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) {
             auto req_id = m_req_id.fetch_add(1);
             auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
             auto buffer = pack<decltype(header)>(std::move(header));
@@ -52,7 +52,7 @@ public:
         }
 
         void {{func.func_name}}({{_format_args(func.inputs)}},
-            std::function<void({{_format_args(func.outputs)}})> cb,
+            std::function<void({{_format_args_type(func.outputs)}})> cb,
             std::chrono::milliseconds timeout,
             std::function<void()> timeout_cb) {
             auto req_id = m_req_id.fetch_add(1);

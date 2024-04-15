@@ -37,10 +37,12 @@ HelloWorldApi:
         bank_info: {type: BankInfo}
         bank_name: {type: string}
         blance: {type: u64}
+        date: {type: option<string>}
       outputs:
         reply: {type: string}
         info: {type: Info}
         count: {type: u64}
+        date: {type: option<string>}
 
 UniInterface:
   type: interface
