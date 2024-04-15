@@ -1,0 +1,155 @@
+#include <cstdint>
+#include <cstdlib>
+#include <fstream>
+#include <functional>
+#include <memory>
+
+#include <drogon/drogon.h>
+#include <spdlog/spdlog.h>
+
+#include <frpc.hpp>
+#include <string>
+
+using Callback = std::function<void(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&&)>;
+
+namespace nlohmann {
+
+template <class T>
+void to_json(nlohmann::json& j, const std::optional<T>& v) {
+    if (v.has_value())
+        j = *v;
+    else
+        j = nullptr;
+}
+
+template <class T>
+void from_json(const nlohmann::json& j, std::optional<T>& v) {
+    if (j.is_null())
+        v = std::nullopt;
+    else
+        v = j.get<T>();
+}
+
+} // namespace nlohmann
+
+{% for value in node.value %}
+    {% if value.type == "interface" %}
+        {% if value.pattern == "bi" %}
+            struct {{value.node_name}} final {
+                {{value.node_name}}(frpc::ChannelConfig bi_config)
+                : m_client({{node.property.namespace}}::{{value.caller}}::create(bi_config, [](std::string error) {
+                    spdlog::error("{{node.property.namespace}}::{{value.caller}} error: {}", error);
+                })) {
+                    m_client->start();
+                }
+                {% for func in value.definitions %}
+                    void {{func.func_name}}(const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+                        using namespace {{node.property.namespace}};
+                        auto request = nlohmann::json::parse(http_request_ptr->getBody());
+                        {% for input in func.inputs %}
+                            auto {{input.name}} = request["{{input.name}}"].template get<{{input.type}}>();
+                        {% endfor %}
+                        m_client->{{func.func_name}}(
+                            {{_format_args_name_and_move(func.inputs)}},
+                            [callback]({{_format_args(func.outputs)}}) mutable {
+                                nlohmann::json json;
+                                {% for output in func.outputs %}
+                                    json["{{output.name}}"] = {{_format_move_or_not(output.name, output.type)}};
+                                {% endfor %}
+                                auto resp = drogon::HttpResponse::newHttpResponse();
+                                resp->setBody(json.dump());
+                                callback(resp);
+                            },
+                            std::chrono::milliseconds({{func.web.timeout}}),
+                            [callback] {
+                                auto resp = drogon::HttpResponse::newHttpResponse(
+                                    drogon::HttpStatusCode::k408RequestTimeout,
+                                    drogon::ContentType::CT_APPLICATION_JSON);
+                                callback(resp);
+                            });
+                    }
+                {% endfor %}
+                std::unique_ptr<{{node.property.namespace}}::{{value.caller}}> m_client;
+            };
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+int main(int argc, char** argv) {
+{% for value in node.value %}
+    {% if value.type == "interface" %}
+        {% if value.pattern == "bi" %}
+            frpc::ChannelConfig {{_snake(value.node_name)}}_config{};
+            {{_snake(value.node_name)}}_config.addr = "tcp://127.0.0.1:5878";
+            if (char* addr = std::getenv("{{ upper(_snake(value.node_name)) }}_ADDR"))
+                 {{_snake(value.node_name)}}_config.addr = addr;
+
+            {{value.node_name}} {{_snake(value.node_name)}}_client({{_snake(value.node_name)}}_config);
+                {% for func in value.definitions %}
+                    drogon::app().registerHandler(
+                        "{{func.web.path}}",
+                        [&] -> Callback {
+                             return std::bind_front(&{{value.node_name}}::{{func.func_name}}, &{{_snake(value.node_name)}}_client);
+                        }(),
+                        {drogon::HttpMethod::Post});
+
+                {% endfor %}
+        {% endif %}
+    {% endif %}
+{% endfor %}
+
+    drogon::app().registerHandler(
+        "/interface",
+        [&] (const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+            nlohmann::json json;
+            using namespace {{node.property.namespace}};
+            {% for value in node.value %}
+                {% if value.type == "interface" %}
+                    {% if value.pattern == "bi" %}
+                            {% for func in value.definitions %}
+                                {
+                                    nlohmann::json tmp;
+                                    {% for input in func.inputs %}
+                                        tmp["input"]["{{input.name}}"] = {{input.type}}{};
+                                    {% endfor %}
+                                    {% for output in func.outputs %}
+                                        tmp["output"]["{{output.name}}"] = {{output.type}}{};
+                                    {% endfor %}
+                                    json["{{func.web.path}}"] = tmp;
+                                }
+                            {% endfor %}
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+            auto resp = drogon::HttpResponse::newHttpResponse();
+            resp->setBody(json.dump());
+            callback(resp);
+        },
+        {drogon::HttpMethod::Post});
+
+    drogon::app()
+        .loadConfigJson([=] {
+            std::ifstream f(std::string{argv[1]});
+            Json::Value settings;
+            f >> settings;
+            if (char* port_ptr = std::getenv("DROGON_PORT"))
+                settings["listeners"][0]["port"] = std::atol(port_ptr);
+            if (char* threads_num_ptr = std::getenv("DROGON_THREADS_NUM"))
+                settings["app"]["number_of_threads"] = std::atol(threads_num_ptr);
+            if (char* max_connections_ptr = std::getenv("DROGON_MAX_CONNECTIONS"))
+                settings["app"]["max_connections"] = std::atol(max_connections_ptr);
+            if (char* level_ptr = std::getenv("DROGON_LOG_LEVEL"))
+                settings["app"]["log"]["log_level"] = level_ptr;
+            if (char* upload_path = std::getenv("UPLOAD_PATH"))
+                settings["app"]["upload_path"] = upload_path;
+            if (char* max_connections_per_ip_ptr = std::getenv("DROGON_MAX_CONNECTIONS_PER_IP"))
+                settings["app"]["max_connections_per_ip"] = max_connections_per_ip_ptr;
+            if (char* client_max_body_size_ptr = std::getenv("CLIENT_MAX_BODY_SIZE"))
+                settings["app"]["client_max_body_size"] = client_max_body_size_ptr;
+            Json::FastWriter writer;
+            std::string json{writer.write(settings)};
+            spdlog::info("{}", json);
+            return settings;
+        }())
+        .run();
+}

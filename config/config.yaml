@@ -33,6 +33,9 @@ HelloWorldApi:
   callee: HelloWorldServer
   definitions:
     hello_world:
+      web:
+        path: "/hello/world"
+        timeout: "9000"
       inputs:
         bank_info: {type: BankInfo}
         bank_name: {type: string}

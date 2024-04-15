@@ -9,6 +9,8 @@ struct {{value.struct_name}} {
 	MSGPACK_DEFINE({{_join(value.definitions)}})
 };
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE({{value.struct_name}}, {{_join(value.definitions)}})
+
 inline std::string toString(const {{value.struct_name}}& value) {
 	std::string str = "{{value.struct_name}}{";
 	{% for field in value.definitions %}

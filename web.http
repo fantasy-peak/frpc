@@ -1,0 +1,32 @@
+### call bi hell_world
+POST http://127.0.0.1:8848/hello/world HTTP/1.1
+content-type: application/json
+
+{
+	"bank_info": {
+		"info": {
+			"name": "rpc"
+		},
+		"name": "xiaoli",
+		"test_map": [
+			[false, 555]
+		],
+		"test_map_one": {
+			"frpc": "EnumOne"
+		},
+		"test_one": 100,
+		"test_two": 101,
+		"test_vector": ["vector"],
+		"type": "EnumOne"
+	},
+	"bank_name": "web back",
+	"blance": 895,
+	"date": "20240888"
+}
+
+### Query interface input/output parameters
+POST http://127.0.0.1:8848/interface HTTP/1.1
+content-type: application/json
+
+{
+}

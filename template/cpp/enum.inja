@@ -1,29 +1,35 @@
 namespace {{node.property.namespace}} {
 
 enum class {{value.enum_name}} : {{value.value_type}} {
-	{% for field in value.definitions %}
-		{{field.name}} = {{field.default}}, // {{field.comment}}
-	{% endfor %}
+    {% for field in value.definitions %}
+        {{field.name}} = {{field.default}}, // {{field.comment}}
+    {% endfor %}
 };
 
+NLOHMANN_JSON_SERIALIZE_ENUM( {{value.enum_name}}, {
+    {% for field in value.definitions %}
+        { {{value.enum_name}}::{{field.name}},"{{field.name}}" },
+    {% endfor %}
+})
+
 inline std::string_view toString(const {{value.enum_name}} value) {
-	switch (value) {
-	{% for field in value.definitions %}
-		case {{value.enum_name}}::{{field.name}}:
-			return "{{field.default}}";
-	{% endfor %}
-	default:
-		return "???";
-	}
+    switch (value) {
+    {% for field in value.definitions %}
+        case {{value.enum_name}}::{{field.name}}:
+            return "{{field.default}}";
+    {% endfor %}
+    default:
+        return "???";
+    }
 }
 
 template <>
 inline {{value.enum_name}} fromString<{{value.enum_name}}>(const std::string& value) {
-	{% for field in value.definitions %}
-	if (value == "{{field.name}}")
-		return {{value.enum_name}}::{{field.name}};
-	{% endfor %}
-	throw std::bad_cast();
+    {% for field in value.definitions %}
+    if (value == "{{field.name}}")
+        return {{value.enum_name}}::{{field.name}};
+    {% endfor %}
+    throw std::bad_cast();
 }
 
 } // {{node.property.namespace}}
