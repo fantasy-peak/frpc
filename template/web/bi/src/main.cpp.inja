@@ -35,42 +35,53 @@ void from_json(const nlohmann::json& j, std::optional<T>& v) {
 {% for value in node.value %}
     {% if value.type == "interface" %}
         {% if value.pattern == "bi" %}
-            struct {{value.node_name}} final {
-                {{value.node_name}}(frpc::ChannelConfig bi_config)
-                : m_client({{node.property.namespace}}::{{value.caller}}::create(bi_config, [](std::string error) {
-                    spdlog::error("{{node.property.namespace}}::{{value.caller}} error: {}", error);
-                })) {
-                    m_client->start();
-                }
-                {% for func in value.definitions %}
-                    void {{func.func_name}}(const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
-                        using namespace {{node.property.namespace}};
-                        auto request = nlohmann::json::parse(http_request_ptr->getBody());
-                        {% for input in func.inputs %}
-                            auto {{input.name}} = request["{{input.name}}"].template get<{{input.type}}>();
-                        {% endfor %}
-                        m_client->{{func.func_name}}(
-                            {{_format_args_name_and_move(func.inputs)}},
-                            [callback]({{_format_args(func.outputs)}}) mutable {
-                                nlohmann::json json;
-                                {% for output in func.outputs %}
-                                    json["{{output.name}}"] = {{_format_move_or_not(output.name, output.type)}};
-                                {% endfor %}
-                                auto resp = drogon::HttpResponse::newHttpResponse();
-                                resp->setBody(json.dump());
-                                callback(resp);
-                            },
-                            std::chrono::milliseconds({{func.web.timeout}}),
-                            [callback] {
-                                auto resp = drogon::HttpResponse::newHttpResponse(
-                                    drogon::HttpStatusCode::k408RequestTimeout,
-                                    drogon::ContentType::CT_APPLICATION_JSON);
-                                callback(resp);
-                            });
+            {% set has_web="false" %}
+            {% for func in value.definitions %}
+                {% if existsIn(func, "web")  == true %}
+                    {% set has_web="true" %}
+                {% endif %}
+            {% endfor %}
+            {% if has_web  == "true" %}
+                struct {{value.node_name}} final {
+                    {{value.node_name}}(frpc::ChannelConfig bi_config)
+                    : m_client({{node.property.namespace}}::{{value.caller}}::create(bi_config, [](std::string error) {
+                        spdlog::error("{{node.property.namespace}}::{{value.caller}} error: {}", error);
+                    })) {
+                        m_client->start();
                     }
-                {% endfor %}
-                std::unique_ptr<{{node.property.namespace}}::{{value.caller}}> m_client;
-            };
+                    {% for func in value.definitions %}
+                        {% if existsIn(func, "web")  == true %}
+                            void {{func.func_name}}(const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+                                using namespace {{node.property.namespace}};
+                                auto request = nlohmann::json::parse(http_request_ptr->getBody());
+                                {% for input in func.inputs %}
+                                    auto {{input.name}} = request["{{input.name}}"].template get<{{input.type}}>();
+                                {% endfor %}
+                                m_client->{{func.func_name}}(
+                                    {{_format_args_name_and_move(func.inputs)}},
+                                    [callback]({{_format_args(func.outputs)}}) mutable {
+                                        nlohmann::json json;
+                                        {% for output in func.outputs %}
+                                            json["{{output.name}}"] = {{_format_move_or_not(output.name, output.type)}};
+                                        {% endfor %}
+                                        auto resp = drogon::HttpResponse::newHttpResponse();
+                                        resp->setBody(json.dump());
+                                        callback(resp);
+                                    },
+                                    std::chrono::milliseconds({{func.web.timeout}}),
+                                    [callback] {
+                                        auto resp = drogon::HttpResponse::newHttpResponse(
+                                            drogon::HttpStatusCode::k408RequestTimeout,
+                                            drogon::ContentType::CT_APPLICATION_JSON);
+                                        callback(resp);
+                                    });
+                            }
+                        {% endif %}
+                    {% endfor %}
+                    std::unique_ptr<{{node.property.namespace}}::{{value.caller}}> m_client;
+                };
+            {% endif %}
+
         {% endif %}
     {% endif %}
 {% endfor %}
@@ -79,21 +90,30 @@ int main(int argc, char** argv) {
 {% for value in node.value %}
     {% if value.type == "interface" %}
         {% if value.pattern == "bi" %}
-            frpc::ChannelConfig {{_snake(value.node_name)}}_config{};
-            {{_snake(value.node_name)}}_config.addr = "tcp://127.0.0.1:5878";
-            if (char* addr = std::getenv("{{ upper(_snake(value.node_name)) }}_ADDR"))
-                 {{_snake(value.node_name)}}_config.addr = addr;
+            {% set has_web="false" %}
+            {% for func in value.definitions %}
+                {% if existsIn(func, "web")  == true %}
+                    {% set has_web="true" %}
+                {% endif %}
+            {% endfor %}
+            {% if has_web  == "true" %}
+                frpc::ChannelConfig {{_snake(value.node_name)}}_config{};
+                {{_snake(value.node_name)}}_config.addr = "tcp://127.0.0.1:5878";
+                if (char* addr = std::getenv("{{ upper(_snake(value.node_name)) }}_ADDR"))
+                    {{_snake(value.node_name)}}_config.addr = addr;
+                {{value.node_name}} {{_snake(value.node_name)}}_client({{_snake(value.node_name)}}_config);
+            {% endif %}
 
-            {{value.node_name}} {{_snake(value.node_name)}}_client({{_snake(value.node_name)}}_config);
-                {% for func in value.definitions %}
+            {% for func in value.definitions %}
+                {% if existsIn(func, "web")  == true %}
                     drogon::app().registerHandler(
                         "{{func.web.path}}",
                         [&] -> Callback {
-                             return std::bind_front(&{{value.node_name}}::{{func.func_name}}, &{{_snake(value.node_name)}}_client);
+                            return std::bind_front(&{{value.node_name}}::{{func.func_name}}, &{{_snake(value.node_name)}}_client);
                         }(),
                         {drogon::HttpMethod::Post});
-
-                {% endfor %}
+                {% endif %}
+            {% endfor %}
         {% endif %}
     {% endif %}
 {% endfor %}
@@ -107,16 +127,18 @@ int main(int argc, char** argv) {
                 {% if value.type == "interface" %}
                     {% if value.pattern == "bi" %}
                             {% for func in value.definitions %}
-                                {
-                                    nlohmann::json tmp;
-                                    {% for input in func.inputs %}
-                                        tmp["input"]["{{input.name}}"] = {{input.type}}{};
-                                    {% endfor %}
-                                    {% for output in func.outputs %}
-                                        tmp["output"]["{{output.name}}"] = {{output.type}}{};
-                                    {% endfor %}
-                                    json["{{func.web.path}}"] = tmp;
-                                }
+                                {% if existsIn(func, "web")  == true %}
+                                    {
+                                        nlohmann::json tmp;
+                                        {% for input in func.inputs %}
+                                            tmp["input"]["{{input.name}}"] = {{input.type}}{};
+                                        {% endfor %}
+                                        {% for output in func.outputs %}
+                                            tmp["output"]["{{output.name}}"] = {{output.type}}{};
+                                        {% endfor %}
+                                        json["{{func.web.path}}"] = tmp;
+                                    }
+                                {% endif %}
                             {% endfor %}
                     {% endif %}
                 {% endif %}

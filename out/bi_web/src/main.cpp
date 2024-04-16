@@ -74,8 +74,8 @@ int main(int argc, char** argv) {
     hello_world_api_config.addr = "tcp://127.0.0.1:5878";
     if (char* addr = std::getenv("HELLO_WORLD_API_ADDR"))
         hello_world_api_config.addr = addr;
-
     HelloWorldApi hello_world_api_client(hello_world_api_config);
+
     drogon::app().registerHandler(
         "/hello/world",
         [&] -> Callback {
