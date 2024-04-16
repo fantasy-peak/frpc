@@ -837,6 +837,7 @@ private:
 #endif
                     auto cb = std::move(m_cb[req_id]);
                     m_cb.erase(req_id);
+                    m_timeout_cb.erase(req_id);
                     lk.unlock();
                     auto callback = std::any_cast<std::function<void(std::string, Info, uint64_t, std::optional<std::string>)>>(cb);
                     callback(std::move(reply), std::move(info), count, std::move(date));

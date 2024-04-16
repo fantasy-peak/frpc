@@ -161,6 +161,7 @@ private:
 #endif
                     auto cb = std::move(m_cb[req_id]);
                     m_cb.erase(req_id);
+                    m_timeout_cb.erase(req_id);
                     lk.unlock();
                     auto callback = std::any_cast<std::function<void({{_format_args_type(func.outputs)}})>>(cb);
                     callback({{_format_args_name_and_move(func.outputs)}});
