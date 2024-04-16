@@ -22,6 +22,7 @@
 #include <uuid/uuid.h>
 #include <zmq.hpp>
 #include <zmq_addon.hpp>
+#include <nlohmann/json.hpp>
 
 #ifdef __cpp_impl_coroutine
 #include <asio.hpp>

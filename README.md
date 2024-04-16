@@ -19,7 +19,7 @@ To run the application, run the following command:
 2. git clone https://github.com/fantasy-peak/frpc.git
 3. xmake build -v -y
 4. xmake install -o .
-5. ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out
+5. ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out -w ./template/web
 // compile and run test
 6. xmake build -v -y --file=./test_xmake.lua
 7. xmake install -o . --file=./test_xmake.lua
@@ -70,6 +70,9 @@ HelloWorldApi:
   callee: HelloWorldServer
   definitions:
     hello_world:
+      web: # Generate web service definition
+        path: "/hello/world"
+        timeout: "9000"
       inputs:
         bank_info: {type: BankInfo}
         blance: {type: u64}

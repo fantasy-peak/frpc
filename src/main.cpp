@@ -1,6 +1,8 @@
+#include <cstdint>
 #include <iostream>
 #include <ranges>
 #include <regex>
+#include <random>
 
 #include <spdlog/spdlog.h>
 #include <yaml-cpp/yaml.h>
@@ -177,6 +179,26 @@ auto _format_args_name(inja::Arguments& args) {
     return str;
 }
 
+auto _format_move_or_not(inja::Arguments& args) {
+    auto convert = [](const auto& type, const auto& name) {
+        if (CPP_TYPE_TABLE.contains(type))
+            return name;
+        return std::format("std::move({})", name);
+    };
+    auto name = args.at(0)->get<std::string>();
+    auto type = args.at(1)->get<std::string>();
+    return convert(type, name);
+}
+
+auto _random(inja::Arguments& args) {
+    auto min = args.at(0)->get<uint64_t>();
+    auto max = args.at(1)->get<uint64_t>();
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distrib(min, max);
+    return distrib(gen);
+}
+
 void formatCode(const std::string& file, const std::string& content) {
     {
         std::ofstream write(file);
@@ -222,6 +244,7 @@ auto parseYaml(const std::string& file) {
             ast["node"][node_name]["namespace"] = namespace_str;
             continue;
         }
+        data["node_name"] = node_name;
         data["property"]["filename"] = filename;
         data["property"]["namespace"] = namespace_str;
         auto type = config[node_name]["type"].as<std::string>();
@@ -261,6 +284,10 @@ auto parseYaml(const std::string& file) {
                 nlohmann::json in_out;
                 j["func_name"] = struct_val.first.as<std::string>();
                 for (auto val : struct_val.second) {
+                    if (val.first.as<std::string>() == "web") {
+                        j["web"] = yaml2json(val.second);
+                        continue;
+                    }
                     for (auto val1 : val.second) {
                         in_out["name"] = val1.first.as<std::string>();
                         in_out["type"] = toCppType(val1.second["type"].as<std::string>());
@@ -281,12 +308,14 @@ int main(int argc, char** argv) {
     a.add<std::string>("template", 't', "template directory", true, "");
     a.add<std::string>("output", 'o', "output directory", true, "");
     a.add<std::string>("lang", 'l', "Language", false, "cpp");
+    a.add<std::string>("web_template", 'w', "web template directory", false, "");
     a.parse_check(argc, argv);
 
     auto filename = a.get<std::string>("filename");
     auto injia_template = a.get<std::string>("template");
     auto output = a.get<std::string>("output");
     auto lang = a.get<std::string>("lang");
+    auto web_template = a.get<std::string>("web_template");
 
     spdlog::info("filename: {}", filename);
     if (injia_template.back() == '/')
@@ -310,12 +339,34 @@ int main(int argc, char** argv) {
     env.add_callback("_format_args_type", 1, _format_args_type);
     env.add_callback("_format_args_name_and_move", 1, _format_args_name_and_move);
     env.add_callback("_format_catch_move", 1, _format_catch_move);
+    env.add_callback("_format_move_or_not", 2, _format_move_or_not);
+    env.add_callback("_random", 2, _random);
 
     auto temp = env.parse_template(injia_template);
     std::string result = env.render(temp, data);
 
+    std::filesystem::create_directories(output);
     auto f = std::format("{}/{}", output, data["node"].at("property").at("filename").get<std::string>());
     formatCode(f, result);
+
+    if (web_template.empty())
+        return 0;
+    // generate bi web service
+    std::filesystem::create_directories(std::format("{}/bi_web/src/", output));
+    std::filesystem::create_directories(std::format("{}/bi_web/include/", output));
+    std::filesystem::create_directories(std::format("{}/bi_web/config/", output));
+    f = std::format("{}/bi_web/include/{}", output, data["node"].at("property").at("filename").get<std::string>());
+    formatCode(f, result);
+
+    auto bi_temp = env.parse_template(std::format("{}/bi/src/main.cpp.inja", web_template));
+    result = env.render(bi_temp, data);
+    formatCode(std::format("{}/bi_web/src/main.cpp", output), result);
+
+    bi_temp = env.parse_template(std::format("{}/bi/xmake.lua.inja", web_template));
+    env.write(bi_temp, data, std::format("{}/bi_web/xmake.lua", output));
+
+    bi_temp = env.parse_template(std::format("{}/bi/config/config.example.json.inja", web_template));
+    env.write(bi_temp, data, std::format("{}/bi_web/config/config.example.json", output));
 
     return 0;
 }
