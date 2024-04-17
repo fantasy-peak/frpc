@@ -48,7 +48,7 @@ void start_server() {
         [](std::string error) {
             spdlog::error("frpc::HelloWorldServer error: {}", error);
         });
-    auto monitor = std::make_unique<frpc::Monitor>(server->context(), server->socket());
+    auto monitor = std::make_unique<frpc::Monitor>(*(server->context()), *(server->socket()));
     auto event_cb = [](std::optional<std::tuple<zmq_event_t, std::string>> data) {
         if (!data.has_value())
             return;

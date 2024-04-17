@@ -59,11 +59,11 @@ public:
         m_channel->start();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 
@@ -230,11 +230,11 @@ public:
             m_pool_ptr->stop();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 

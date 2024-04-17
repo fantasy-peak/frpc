@@ -62,11 +62,11 @@ public:
     }
 
     auto& context() {
-        return *m_context_ptr;
+        return m_context_ptr;
     }
 
     auto& socket() {
-        return *m_socket_ptr;
+        return m_socket_ptr;
     }
 
 private:

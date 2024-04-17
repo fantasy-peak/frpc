@@ -448,11 +448,11 @@ public:
     }
 
     auto& socket() {
-        return *m_socket_ptr;
+        return m_socket_ptr;
     }
 
     auto& context() {
-        return *m_context_ptr;
+        return m_context_ptr;
     }
 
 private:
@@ -572,11 +572,11 @@ public:
     }
 
     auto& context() {
-        return *m_context_ptr;
+        return m_context_ptr;
     }
 
     auto& socket() {
-        return *m_socket_ptr;
+        return m_socket_ptr;
     }
 
 private:
@@ -751,11 +751,11 @@ public:
         m_channel->start();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 
@@ -1179,11 +1179,11 @@ public:
         m_channel->start();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 
@@ -1452,11 +1452,11 @@ public:
         m_channel->start();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 
@@ -1621,11 +1621,11 @@ public:
             m_pool_ptr->stop();
     }
 
-    auto& socket() {
+    decltype(auto) socket() {
         return m_channel->socket();
     }
 
-    auto& context() {
+    decltype(auto) context() {
         return m_channel->context();
     }
 

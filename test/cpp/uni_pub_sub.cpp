@@ -2,6 +2,7 @@
 #include <string>
 
 #include <spdlog/spdlog.h>
+#include <zmq.h>
 
 #include "frpc.hpp"
 
@@ -73,14 +74,14 @@ int main() {
         [](auto error) {
             spdlog::error("{}", error);
         });
-    auto monitor = std::make_unique<frpc::Monitor>(receiver->context(), receiver->socket());
+    auto monitor = std::make_unique<frpc::Monitor>(*(receiver->context()), *(receiver->socket()));
     auto event_cb = [](std::optional<std::tuple<zmq_event_t, std::string>> data) {
         if (!data.has_value())
             return;
         auto& [event, point] = data.value();
         spdlog::info("HelloWorldReceiver monitor: {} {}", frpc::getEventName(event.event), point);
     };
-    monitor->start(event_cb, ZMQ_EVENT_ACCEPTED | ZMQ_EVENT_DISCONNECTED);
+    monitor->start(event_cb, ZMQ_EVENT_CONNECTED| ZMQ_EVENT_DISCONNECTED);
     receiver->start();
 
     std::this_thread::sleep_for(std::chrono::seconds(10));
