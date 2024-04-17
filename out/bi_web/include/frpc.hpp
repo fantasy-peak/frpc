@@ -336,47 +336,38 @@ public:
     BiChannel(const ChannelConfig& config,
               std::function<void(std::string)> error,
               std::function<void(std::vector<zmq::message_t>&)> cb)
-        : m_context(config.io_threads)
-        , m_socket(m_context, config.socktype)
-        , m_send(m_context, zmq::socket_type::push)
-        , m_recv(m_context, zmq::socket_type::pull)
+        : m_context_ptr(std::make_shared<zmq::context_t>(config.io_threads))
+        , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
+        , m_send(*m_context_ptr, zmq::socket_type::push)
+        , m_recv(*m_context_ptr, zmq::socket_type::pull)
         , m_error(std::move(error))
         , m_cb(std::move(cb)) {
-        m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_socket.set(zmq::sockopt::linger, config.linger);
-        if (config.tcp_keepalive) {
-            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
-        }
-        if (config.probe) {
-            m_socket.set(zmq::sockopt::probe_router, 1);
-        }
-        if (config.bind) {
-            if (config.socktype == zmq::socket_type::router) {
-                if (config.mandatory)
-                    m_socket.set(zmq::sockopt::router_mandatory, 0);
-                else
-                    m_socket.set(zmq::sockopt::router_mandatory, 1);
-            }
-            m_socket.bind(config.addr);
-        } else {
-            m_socket.connect(config.addr);
-        }
-        auto addr = uniqueAddr();
-        m_recv.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_recv.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_recv.bind(addr);
-
-        m_send.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_send.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_send.set(zmq::sockopt::linger, config.linger);
-
-        m_send.connect(addr);
+        init_socket(config);
+    }
+    BiChannel(const ChannelConfig& config,
+              const std::shared_ptr<zmq::context_t>& context_ptr,
+              std::function<void(std::string)> error,
+              std::function<void(std::vector<zmq::message_t>&)> cb)
+        : m_context_ptr(context_ptr)
+        , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
+        , m_send(*m_context_ptr, zmq::socket_type::push)
+        , m_recv(*m_context_ptr, zmq::socket_type::pull)
+        , m_error(std::move(error))
+        , m_cb(std::move(cb)) {
+        init_socket(config);
+    }
+    BiChannel(const ChannelConfig& config,
+              const std::shared_ptr<zmq::context_t>& context_ptr,
+              const std::shared_ptr<zmq::socket_t>& socket_ptr,
+              std::function<void(std::string)> error,
+              std::function<void(std::vector<zmq::message_t>&)> cb)
+        : m_context_ptr(context_ptr)
+        , m_socket_ptr(socket_ptr)
+        , m_send(*m_context_ptr, zmq::socket_type::push)
+        , m_recv(*m_context_ptr, zmq::socket_type::pull)
+        , m_error(std::move(error))
+        , m_cb(std::move(cb)) {
+        init_socket(config);
     }
     ~BiChannel() {
         m_running = false;
@@ -408,7 +399,7 @@ public:
         m_running = true;
         m_thread = std::thread([this] {
             std::vector<zmq::pollitem_t> items{
-                {static_cast<void*>(m_socket), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
+                {static_cast<void*>(*m_socket_ptr), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
                 {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
             std::chrono::milliseconds interval(100);
@@ -417,7 +408,7 @@ public:
                 zmq::poll(items, interval);
                 if (items[0].revents & ZMQ_POLLIN) {
                     std::vector<zmq::message_t> recv_msgs;
-                    auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
+                    auto ret = zmq::recv_multipart(*m_socket_ptr, std::back_inserter(recv_msgs));
                     if (!ret) {
                         m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
                         break;
@@ -432,7 +423,7 @@ public:
                             m_error(FRPC_ERROR_FORMAT("recv zmq::recv_multipart error!!!"));
                             break;
                         }
-                        if (!zmq::send_multipart(m_socket, recv_msgs)) {
+                        if (!zmq::send_multipart(*m_socket_ptr, recv_msgs)) {
                             m_error(FRPC_ERROR_FORMAT("zmq::send_multipart error!!!"));
                             break;
                         }
@@ -457,16 +448,54 @@ public:
     }
 
     auto& socket() {
-        return m_socket;
+        return *m_socket_ptr;
     }
 
     auto& context() {
-        return m_context;
+        return *m_context_ptr;
     }
 
 private:
-    zmq::context_t m_context;
-    zmq::socket_t m_socket;
+    void init_socket(const ChannelConfig& config) {
+        m_socket_ptr->set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_socket_ptr->set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_socket_ptr->set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_socket_ptr->set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_socket_ptr->set(zmq::sockopt::linger, config.linger);
+        if (config.tcp_keepalive) {
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive, 1);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+        }
+        if (config.probe) {
+            m_socket_ptr->set(zmq::sockopt::probe_router, 1);
+        }
+        if (config.bind) {
+            if (config.socktype == zmq::socket_type::router) {
+                if (config.mandatory)
+                    m_socket_ptr->set(zmq::sockopt::router_mandatory, 0);
+                else
+                    m_socket_ptr->set(zmq::sockopt::router_mandatory, 1);
+            }
+            m_socket_ptr->bind(config.addr);
+        } else {
+            m_socket_ptr->connect(config.addr);
+        }
+        auto addr = uniqueAddr();
+        m_recv.set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_recv.set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_recv.bind(addr);
+
+        m_send.set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_send.set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_send.set(zmq::sockopt::linger, config.linger);
+
+        m_send.connect(addr);
+    }
+
+    std::shared_ptr<zmq::context_t> m_context_ptr;
+    std::shared_ptr<zmq::socket_t> m_socket_ptr;
     zmq::socket_t m_send;
     zmq::socket_t m_recv;
     std::function<void(std::string)> m_error;
@@ -486,54 +515,32 @@ public:
     UniChannel(const ChannelConfig& config,
                std::function<void(std::vector<zmq::message_t>&)> cb,
                std::function<void(std::string)> error)
-        : m_context(std::make_shared<zmq::context_t>(config.io_threads))
-        , m_socket(*m_context, config.socktype)
+        : m_context_ptr(std::make_shared<zmq::context_t>(config.io_threads))
+        , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
         , m_cb(std::move(cb))
         , m_error(std::move(error)) {
-        m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_socket.set(zmq::sockopt::linger, config.linger);
-        if (config.tcp_keepalive) {
-            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
-        }
-        if (config.socktype == zmq::socket_type::sub)
-            m_socket.set(zmq::sockopt::subscribe, "");
-        if (config.bind)
-            m_socket.bind(config.addr);
-        else
-            m_socket.connect(config.addr);
+        init_socket(config);
     }
-
-    UniChannel(std::shared_ptr<zmq::context_t> context,
-               const ChannelConfig& config,
+    UniChannel(const ChannelConfig& config,
+               const std::shared_ptr<zmq::context_t>& context_ptr,
                std::function<void(std::vector<zmq::message_t>&)> cb,
                std::function<void(std::string)> error)
-        : m_context(std::move(context))
-        , m_socket(*m_context, config.socktype)
+        : m_context_ptr(context_ptr)
+        , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
         , m_cb(std::move(cb))
         , m_error(std::move(error)) {
-        m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_socket.set(zmq::sockopt::linger, config.linger);
-        if (config.tcp_keepalive) {
-            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
-        }
-        if (config.socktype == zmq::socket_type::sub)
-            m_socket.set(zmq::sockopt::subscribe, "");
-        if (config.bind)
-            m_socket.bind(config.addr);
-        else
-            m_socket.connect(config.addr);
+        init_socket(config);
+    }
+    UniChannel(const ChannelConfig& config,
+               const std::shared_ptr<zmq::context_t>& context_ptr,
+               const std::shared_ptr<zmq::socket_t>& socket_ptr,
+               std::function<void(std::vector<zmq::message_t>&)> cb,
+               std::function<void(std::string)> error)
+        : m_context_ptr(context_ptr)
+        , m_socket_ptr(socket_ptr)
+        , m_cb(std::move(cb))
+        , m_error(std::move(error)) {
+        init_socket(config);
     }
 
     ~UniChannel() {
@@ -546,14 +553,14 @@ public:
         m_running = true;
         m_thread = std::thread([this] {
             std::vector<zmq::pollitem_t> items{
-                {static_cast<void*>(m_socket), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
+                {static_cast<void*>(*m_socket_ptr), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
             std::chrono::milliseconds interval(200);
             while (m_running.load()) {
                 zmq::poll(items, interval);
                 if (items[0].revents & ZMQ_POLLIN) {
                     std::vector<zmq::message_t> recv_msgs;
-                    auto ret = zmq::recv_multipart(m_socket, std::back_inserter(recv_msgs));
+                    auto ret = zmq::recv_multipart(*m_socket_ptr, std::back_inserter(recv_msgs));
                     if (!ret) {
                         m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
                         break;
@@ -565,16 +572,36 @@ public:
     }
 
     auto& context() {
-        return *m_context;
+        return *m_context_ptr;
     }
 
     auto& socket() {
-        return m_socket;
+        return *m_socket_ptr;
     }
 
 private:
-    std::shared_ptr<zmq::context_t> m_context;
-    zmq::socket_t m_socket;
+    void init_socket(const ChannelConfig& config) {
+        m_socket_ptr->set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_socket_ptr->set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_socket_ptr->set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_socket_ptr->set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_socket_ptr->set(zmq::sockopt::linger, config.linger);
+        if (config.tcp_keepalive) {
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive, 1);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+            m_socket_ptr->set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+        }
+        if (config.socktype == zmq::socket_type::sub)
+            m_socket_ptr->set(zmq::sockopt::subscribe, "");
+        if (config.bind)
+            m_socket_ptr->bind(config.addr);
+        else
+            m_socket_ptr->connect(config.addr);
+    }
+
+    std::shared_ptr<zmq::context_t> m_context_ptr;
+    std::shared_ptr<zmq::socket_t> m_socket_ptr;
     std::function<void(std::vector<zmq::message_t>&)> m_cb;
     std::function<void(std::string)> m_error;
     std::atomic_bool m_running;
@@ -702,6 +729,23 @@ public:
         }))
         , m_error(error) {
     }
+    HelloWorldClient(const ChannelConfig& config,
+                     const std::shared_ptr<zmq::context_t>& context_ptr,
+                     const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                     std::function<void(std::string)> error)
+        : m_channel(std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+    }
+    HelloWorldClient(const ChannelConfig& config,
+                     const std::shared_ptr<zmq::context_t>& context_ptr,
+                     std::function<void(std::string)> error)
+        : m_channel(std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+    }
 
     void start() {
         m_channel->start();
@@ -801,6 +845,18 @@ public:
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<HelloWorldClient>(config, std::move(error));
     }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::function<void(std::string)> error) {
+        return std::make_unique<HelloWorldClient>(config, context_ptr, socket_ptr, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<HelloWorldClient>(config, context_ptr, std::move(error));
+    }
 
 private:
     void callTimeoutCallback(uint64_t req_id) {
@@ -879,50 +935,36 @@ public:
         m_pool_ptr->start();
 #endif
         m_channel = std::make_unique<BiChannel>(config, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
-            if (recv_bufs.size() != 3) {
-                m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
-                return;
-            }
-            try {
-                auto [req_id, req_type] = unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[1].data(), recv_bufs[1].size());
-                switch (req_type) {
-                    case HelloWorldClientHelloWorldServer::hello_world: {
-                        auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(recv_bufs[2].data(), recv_bufs[2].size());
-                        std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
-                            auto& snd_bufs = *ptr;
-                            auto packet = pack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
-                            snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
-                            m_channel->send(std::move(snd_bufs));
-                        };
-                        std::visit([&](auto&& arg) mutable {
-                            auto& [bank_info, bank_name, blance, date] = tp;
-                            using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
-                            } else {
+            dispatch(recv_bufs);
+        });
+    }
+    HelloWorldServer(const ChannelConfig& config,
+                     const std::shared_ptr<zmq::context_t>& context_ptr,
+                     const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                     std::function<void(std::string)> error)
+        : m_handler(std::move(handler))
+        , m_error(error) {
 #ifdef __cpp_impl_coroutine
-                                asio::co_spawn(
-                                    m_pool_ptr->getIoContext(),
-                                    arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out)),
-                                    asio::detached);
-#else
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
 #endif
-                            }
-                        },
-                                   m_handler);
-                        break;
-                    }
-                    default:
-                        m_error(FRPC_ERROR_FORMAT("error type"));
-                }
-            } catch (const msgpack::type_error& error) {
-                m_error(FRPC_ERROR_FORMAT(error.what()));
-            } catch (const std::bad_any_cast& error) {
-                m_error(FRPC_ERROR_FORMAT(error.what()));
-            } catch (const std::exception& error) {
-                m_error(FRPC_ERROR_FORMAT(error.what()));
-            }
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
+            dispatch(recv_bufs);
+        });
+    }
+    HelloWorldServer(const ChannelConfig& config,
+                     const std::shared_ptr<zmq::context_t>& context_ptr,
+                     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                     std::function<void(std::string)> error)
+        : m_handler(std::move(handler))
+        , m_error(error) {
+#ifdef __cpp_impl_coroutine
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+#endif
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
+            dispatch(recv_bufs);
         });
     }
     ~HelloWorldServer() {
@@ -951,8 +993,71 @@ public:
         config.bind = true;
         return std::make_unique<HelloWorldServer>(config, std::move(handler), std::move(error));
     }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                       std::function<void(std::string)> error) {
+        config.bind = true;
+        return std::make_unique<HelloWorldServer>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                       std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<HelloWorldServer>(config, context_ptr, std::move(handler), std::move(error));
+    }
 
 private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
+        if (recv_bufs.size() != 3) {
+            m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
+            return;
+        }
+        try {
+            auto [req_id, req_type] = unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[1].data(), recv_bufs[1].size());
+            switch (req_type) {
+                case HelloWorldClientHelloWorldServer::hello_world: {
+                    auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                        auto& snd_bufs = *ptr;
+                        auto packet = pack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
+                        snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
+                        m_channel->send(std::move(snd_bufs));
+                    };
+                    std::visit([&](auto&& arg) mutable {
+                        auto& [bank_info, bank_name, blance, date] = tp;
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                        } else {
+#ifdef __cpp_impl_coroutine
+                            asio::co_spawn(
+                                m_pool_ptr->getIoContext(),
+                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out)),
+                                asio::detached);
+#else
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+#endif
+                        }
+                    },
+                               m_handler);
+                    break;
+                }
+                default:
+                    m_error(FRPC_ERROR_FORMAT("error type"));
+            }
+        } catch (const msgpack::type_error& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        } catch (const std::bad_any_cast& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        } catch (const std::exception& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        }
+    }
+
     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<BiChannel> m_channel;
@@ -1033,7 +1138,7 @@ public:
                                                  error);
     }
     HelloWorldReceiver(const ChannelConfig& config,
-                       const std::shared_ptr<zmq::context_t>& context,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
                        std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
                        std::function<void(std::string)> error)
         : m_handler(std::move(handler))
@@ -1042,7 +1147,23 @@ public:
         m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<UniChannel>(context, config, [this](auto& recv_msgs) mutable {
+        m_channel = std::make_unique<UniChannel>(config, context_ptr, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        },
+                                                 error);
+    }
+    HelloWorldReceiver(const ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       std::function<void(std::string)> error)
+        : m_handler(std::move(handler))
+        , m_error(error) {
+#ifdef __cpp_impl_coroutine
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+#endif
+        m_channel = std::make_unique<UniChannel>(config, context_ptr, socket_ptr, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         },
                                                  error);
@@ -1074,6 +1195,27 @@ public:
         if (config.socktype == zmq::socket_type::sub)
             config.bind = false;
         return std::make_unique<HelloWorldReceiver>(config, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       std::function<void(std::string)> error) {
+        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+            config.socktype = zmq::socket_type::sub;
+        if (config.socktype == zmq::socket_type::sub)
+            config.bind = false;
+        return std::make_unique<HelloWorldReceiver>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       std::function<void(std::string)> error) {
+        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+            config.socktype = zmq::socket_type::sub;
+        if (config.socktype == zmq::socket_type::sub)
+            config.bind = false;
+        return std::make_unique<HelloWorldReceiver>(config, context_ptr, std::move(handler), std::move(error));
     }
 
 private:
@@ -1151,38 +1293,21 @@ class HelloWorldSender final {
 public:
     HelloWorldSender(const ChannelConfig& config)
         : m_context(std::make_shared<zmq::context_t>(config.io_threads))
-        , m_socket(*m_context, config.socktype) {
-        m_socket.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_socket.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_socket.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_socket.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_socket.set(zmq::sockopt::linger, config.linger);
-        if (config.tcp_keepalive) {
-            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
-        }
-        if (config.bind)
-            m_socket.bind(config.addr);
-        else
-            m_socket.connect(config.addr);
+        , m_socket(std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
+        init_socket(config);
     }
-
     HelloWorldSender(const ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context)
         : m_context(context)
-        , m_socket(*m_context, config.socktype) {
-        if (config.tcp_keepalive) {
-            m_socket.set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket.set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket.set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket.set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
-        }
-        if (config.bind)
-            m_socket.bind(config.addr);
-        else
-            m_socket.connect(config.addr);
+        , m_socket(std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
+        init_socket(config);
+    }
+    HelloWorldSender(const ChannelConfig& config,
+                     const std::shared_ptr<zmq::context_t>& context,
+                     const std::shared_ptr<zmq::socket_t>& socket)
+        : m_context(context)
+        , m_socket(socket) {
+        init_socket(config);
     }
 
     ~HelloWorldSender() {
@@ -1195,6 +1320,23 @@ public:
             config.bind = true;
         return std::make_unique<HelloWorldSender>(config);
     }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr) {
+        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+            config.socktype = zmq::socket_type::pub;
+        if (config.socktype == zmq::socket_type::pub)
+            config.bind = true;
+        return std::make_unique<HelloWorldSender>(config, context_ptr, socket_ptr);
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr) {
+        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+            config.socktype = zmq::socket_type::pub;
+        if (config.socktype == zmq::socket_type::pub)
+            config.bind = true;
+        return std::make_unique<HelloWorldSender>(config, context_ptr);
+    }
 
     auto hello_world(std::string in) {
         static auto pub_topic = pack<HelloWorldSenderHelloWorldReceiver>(HelloWorldSenderHelloWorldReceiver::hello_world);
@@ -1203,7 +1345,8 @@ public:
         snd_bufs.emplace_back(zmq::message_t(pub_topic.data(), pub_topic.size()));
         snd_bufs.emplace_back(zmq::message_t(str.data(), str.size()));
         std::lock_guard lk(m_mtx);
-        return zmq::send_multipart(m_socket, std::move(snd_bufs));
+        auto ret = zmq::send_multipart(*m_socket, std::move(snd_bufs));
+        return ret;
     }
     auto notice(int32_t in, std::string info) {
         static auto pub_topic = pack<HelloWorldSenderHelloWorldReceiver>(HelloWorldSenderHelloWorldReceiver::notice);
@@ -1212,12 +1355,39 @@ public:
         snd_bufs.emplace_back(zmq::message_t(pub_topic.data(), pub_topic.size()));
         snd_bufs.emplace_back(zmq::message_t(str.data(), str.size()));
         std::lock_guard lk(m_mtx);
-        return zmq::send_multipart(m_socket, std::move(snd_bufs));
+        auto ret = zmq::send_multipart(*m_socket, std::move(snd_bufs));
+        return ret;
+    }
+
+    auto& socket() {
+        return m_socket;
+    }
+
+    auto& context() {
+        return m_context;
     }
 
 private:
+    void init_socket(const ChannelConfig& config) {
+        m_socket->set(zmq::sockopt::sndhwm, config.sendhwm);
+        m_socket->set(zmq::sockopt::rcvhwm, config.recvhwm);
+        m_socket->set(zmq::sockopt::sndbuf, config.sendbuf);
+        m_socket->set(zmq::sockopt::rcvbuf, config.recvbuf);
+        m_socket->set(zmq::sockopt::linger, config.linger);
+        if (config.tcp_keepalive) {
+            m_socket->set(zmq::sockopt::tcp_keepalive, 1);
+            m_socket->set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
+            m_socket->set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
+            m_socket->set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+        }
+        if (config.bind)
+            m_socket->bind(config.addr);
+        else
+            m_socket->connect(config.addr);
+    }
+
     std::shared_ptr<zmq::context_t> m_context;
-    zmq::socket_t m_socket;
+    std::shared_ptr<zmq::socket_t> m_socket;
     std::mutex m_mtx;
 };
 
@@ -1250,7 +1420,29 @@ public:
         m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
-
+    StreamClient(const ChannelConfig& config,
+                 const std::shared_ptr<zmq::context_t>& context_ptr,
+                 const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                 std::function<void(std::string)> error)
+        : m_config(config)
+        , m_channel(std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+    }
+    StreamClient(const ChannelConfig& config,
+                 const std::shared_ptr<zmq::context_t>& context_ptr,
+                 std::function<void(std::string)> error)
+        : m_config(config)
+        , m_channel(std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+    }
     ~StreamClient() {
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -1305,6 +1497,18 @@ public:
     static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<StreamClient>(config, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::function<void(std::string)> error) {
+        return std::make_unique<StreamClient>(config, context_ptr, socket_ptr, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<StreamClient>(config, context_ptr, std::move(error));
     }
 
 private:
@@ -1385,6 +1589,33 @@ public:
             dispatch(recv_bufs);
         });
     }
+    StreamServer(const ChannelConfig& config,
+                 const std::shared_ptr<zmq::context_t>& context_ptr,
+                 const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                 std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                 std::function<void(std::string)> error)
+        : m_config(config)
+        , m_handler(std::move(handler))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_bufs) {
+            dispatch(recv_bufs);
+        });
+    }
+    StreamServer(const ChannelConfig& config,
+                 const std::shared_ptr<zmq::context_t>& context_ptr,
+                 std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                 std::function<void(std::string)> error)
+        : m_config(config)
+        , m_handler(std::move(handler))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_bufs) {
+            dispatch(recv_bufs);
+        });
+    }
     ~StreamServer() {
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -1408,6 +1639,23 @@ public:
         config.socktype = zmq::socket_type::router;
         config.bind = true;
         return std::make_unique<StreamServer>(config, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
+                       std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                       std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<StreamServer>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+                       const std::shared_ptr<zmq::context_t>& context_ptr,
+                       std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                       std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<StreamServer>(config, context_ptr, std::move(handler), std::move(error));
     }
 
 private:

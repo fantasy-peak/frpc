@@ -20,6 +20,19 @@ public:
               : m_channel(std::make_unique<BiChannel>(config, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
               , m_error(error) {
         }
+        {{value.caller}}(const ChannelConfig& config,
+              const std::shared_ptr<zmq::context_t>& context_ptr,
+              const std::shared_ptr<zmq::socket_t>& socket_ptr,
+              std::function<void(std::string)> error) 
+              : m_channel(std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
+              , m_error(error) {
+        }
+        {{value.caller}}(const ChannelConfig& config,
+              const std::shared_ptr<zmq::context_t>& context_ptr,
+              std::function<void(std::string)> error) 
+              : m_channel(std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
+              , m_error(error) {
+        }
 
         void start() {
             m_channel->start();
@@ -122,6 +135,18 @@ public:
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<{{value.caller}}>(config, std::move(error));
     }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::function<void(std::string)> error) {
+        return std::make_unique<{{value.caller}}>(config, context_ptr, socket_ptr, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<{{value.caller}}>(config, context_ptr, std::move(error));
+    }
 
 private:
     void callTimeoutCallback(uint64_t req_id) {
@@ -207,53 +232,37 @@ public:
                 m_pool_ptr->start();
 #endif
                 m_channel = std::make_unique<BiChannel>(config, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
-                    if (recv_bufs.size() != 3) {
-                        m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
-                        return;
-                    }
-                    try {
-                        auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
-                        switch(req_type) {
-                        {% for func in value.definitions %}
-                            case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
-                                auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
-                                std::function<void({{_format_args_type(func.outputs)}})> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this] ({{_format_args(func.outputs)}}) mutable {
-                                    auto& snd_bufs = *ptr;
-                                    auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
-                                    snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
-                                    m_channel->send(std::move(snd_bufs));
-                                };
-                                std::visit([&](auto&& arg) mutable {
-                                    auto& [{{_format_args_name(func.inputs)}}] = tp;
-                                    using T = std::decay_t<decltype(arg)>;
-                                    if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
-                                        arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
-                                    } else {
+                    dispatch(recv_bufs);
+                });
+        }
+        {{value.callee}}(const ChannelConfig& config,
+            const std::shared_ptr<zmq::context_t>& context_ptr,
+            const std::shared_ptr<zmq::socket_t>& socket_ptr,
+            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+            std::function<void(std::string)> error) 
+              : m_handler(std::move(handler))
+              , m_error(error) {
 #ifdef __cpp_impl_coroutine
-                                        asio::co_spawn(
-                                            m_pool_ptr->getIoContext(),
-                                            arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out)),
-                                            asio::detached);
-#else
-                                        arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+                m_pool_ptr->start();
 #endif
-                                    }
-                                },
-                                m_handler);
-                                break;
-                            }
-                        {% endfor %}
-                        default:
-                            m_error(FRPC_ERROR_FORMAT("error type"));
-                        }
-                    } catch (const msgpack::type_error& error) {
-                        m_error(FRPC_ERROR_FORMAT(error.what()));
-                    } catch (const std::bad_any_cast& error) {
-                        m_error(FRPC_ERROR_FORMAT(error.what()));
-                    } catch (const std::exception& error) {
-                        m_error(FRPC_ERROR_FORMAT(error.what()));
-                    }
-              });
+                m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                    dispatch(recv_bufs);
+                });
+        }
+        {{value.callee}}(const ChannelConfig& config,
+            const std::shared_ptr<zmq::context_t>& context_ptr,
+            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+              std::function<void(std::string)> error) 
+              : m_handler(std::move(handler))
+              , m_error(error) {
+#ifdef __cpp_impl_coroutine
+                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+                m_pool_ptr->start();
+#endif
+                m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                    dispatch(recv_bufs);
+                });
         }
         ~{{value.callee}}() {
 #ifdef __cpp_impl_coroutine
@@ -281,8 +290,73 @@ public:
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
     }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, context_ptr, std::move(handler), std::move(error));
+    }
 
 private:
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
+        if (recv_bufs.size() != 3) {
+            m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
+            return;
+        }
+        try {
+            auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+            switch(req_type) {
+            {% for func in value.definitions %}
+                case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
+                    auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    std::function<void({{_format_args_type(func.outputs)}})> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this] ({{_format_args(func.outputs)}}) mutable {
+                        auto& snd_bufs = *ptr;
+                        auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                        snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
+                        m_channel->send(std::move(snd_bufs));
+                    };
+                    std::visit([&](auto&& arg) mutable {
+                        auto& [{{_format_args_name(func.inputs)}}] = tp;
+                        using T = std::decay_t<decltype(arg)>;
+                        if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
+                            arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+                        } else {
+#ifdef __cpp_impl_coroutine
+                            asio::co_spawn(
+                                m_pool_ptr->getIoContext(),
+                                arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out)),
+                                asio::detached);
+#else
+                            arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+#endif
+                        }
+                    },
+                    m_handler);
+                    break;
+                }
+            {% endfor %}
+            default:
+                m_error(FRPC_ERROR_FORMAT("error type"));
+            }
+        } catch (const msgpack::type_error& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        } catch (const std::bad_any_cast& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        } catch (const std::exception& error) {
+            m_error(FRPC_ERROR_FORMAT(error.what()));
+        }
+    }
+
     std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<BiChannel> m_channel;

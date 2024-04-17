@@ -18,7 +18,7 @@ namespace {{node.property.namespace}} {
 class {{value.caller}} final {
 public:
     {{value.caller}}(const ChannelConfig& config,
-                         std::function<void(std::string)> error)
+        std::function<void(std::string)> error)
         : m_config(config)
         ,m_channel(std::make_unique<BiChannel>(config, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
@@ -27,7 +27,29 @@ public:
         m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
-
+    {{value.caller}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::function<void(std::string)> error)
+        : m_config(config)
+        ,m_channel(std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+    }
+    {{value.caller}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::function<void(std::string)> error)
+        : m_config(config)
+        ,m_channel(std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
+            dispatch(recv_msgs);
+        }))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+    }
     ~{{value.caller}}() {
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -84,6 +106,18 @@ public:
     static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<{{value.caller}}>(config, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::function<void(std::string)> error) {
+        return std::make_unique<{{value.caller}}>(config, context_ptr, socket_ptr, std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::dealer;
+        return std::make_unique<{{value.caller}}>(config, context_ptr, std::move(error));
     }
 
 private:
@@ -159,14 +193,37 @@ struct Coro{{value.callee}}Handler {
 class {{value.callee}} final {
 public:
     {{value.callee}}(const ChannelConfig& config,
-    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
-            std::function<void(std::string)> error) 
-            : m_config(config)
-            , m_handler(std::move(handler))
-            , m_error(error) {
-            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
-            m_pool_ptr->start();
-            m_channel = std::make_unique<BiChannel>(config, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error)
+        : m_config(config)
+        , m_handler(std::move(handler))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+        m_channel = std::make_unique<BiChannel>(config, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+    }
+    {{value.callee}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error)
+        : m_config(config)
+        , m_handler(std::move(handler))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+    }
+    {{value.callee}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error)
+        : m_config(config)
+        , m_handler(std::move(handler))
+        , m_error(error) {
+        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr->start();
+        m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
     }
     ~{{value.callee}}() {
         if (m_pool_ptr)
@@ -185,12 +242,29 @@ public:
         m_channel->start();
     }
 
-    static auto create(ChannelConfig& config, 
+    static auto create(ChannelConfig& config,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
         std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+    }
+    static auto create(ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<{{value.callee}}>(config, context_ptr, std::move(handler), std::move(error));
     }
 
 private:
