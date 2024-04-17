@@ -46,6 +46,7 @@ struct HelloWorldApi final {
         auto bank_name = request["bank_name"].template get<std::string>();
         auto blance = request["blance"].template get<uint64_t>();
         auto date = request["date"].template get<std::optional<std::string>>();
+        static std::chrono::milliseconds timeout(9000);
         m_client->hello_world(
             std::move(bank_info), std::move(bank_name), blance, std::move(date),
             [callback](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
@@ -58,7 +59,7 @@ struct HelloWorldApi final {
                 resp->setBody(json.dump());
                 callback(resp);
             },
-            std::chrono::milliseconds(9000),
+            timeout,
             [callback] {
                 auto resp = drogon::HttpResponse::newHttpResponse(
                     drogon::HttpStatusCode::k408RequestTimeout,

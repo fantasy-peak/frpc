@@ -57,6 +57,7 @@ void from_json(const nlohmann::json& j, std::optional<T>& v) {
                                 {% for input in func.inputs %}
                                     auto {{input.name}} = request["{{input.name}}"].template get<{{input.type}}>();
                                 {% endfor %}
+                                static std::chrono::milliseconds timeout({{func.web.timeout}});
                                 m_client->{{func.func_name}}(
                                     {{_format_args_name_and_move(func.inputs)}},
                                     [callback]({{_format_args(func.outputs)}}) mutable {
@@ -68,7 +69,7 @@ void from_json(const nlohmann::json& j, std::optional<T>& v) {
                                         resp->setBody(json.dump());
                                         callback(resp);
                                     },
-                                    std::chrono::milliseconds({{func.web.timeout}}),
+                                    timeout,
                                     [callback] {
                                         auto resp = drogon::HttpResponse::newHttpResponse(
                                             drogon::HttpStatusCode::k408RequestTimeout,

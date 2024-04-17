@@ -63,7 +63,7 @@ public:
 
     template <typename T>
     void send(T&& snd_msgs,
-        std::chrono::milliseconds timeout,
+        const std::chrono::milliseconds& timeout,
         std::function<void()> cb) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
@@ -80,7 +80,7 @@ public:
                 {static_cast<void*>(m_socket), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
                 {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
-            std::chrono::milliseconds interval(200);
+            std::chrono::milliseconds interval(100);
             std::multimap<std::chrono::system_clock::time_point, std::function<void()>> timeout_task;
             while (m_running.load()) {
                 zmq::poll(items, interval);

@@ -53,7 +53,7 @@ public:
 
         void {{func.func_name}}({{_format_args(func.inputs)}},
             std::function<void({{_format_args_type(func.outputs)}})> cb,
-            std::chrono::milliseconds timeout,
+            const std::chrono::milliseconds& timeout,
             std::function<void()> timeout_cb) {
             auto req_id = m_req_id.fetch_add(1);
             auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
@@ -69,7 +69,7 @@ public:
                 m_timeout_cb.emplace(req_id, std::move(timeout_cb));
             }
             m_channel->send(std::move(snd_bufs),
-                std::move(timeout),
+                timeout,
                 [this, req_id]() mutable {
                 std::unique_lock lk(m_mtx);
 #if __cplusplus >= 202302L
@@ -106,9 +106,9 @@ public:
     }
 
     template <asio::completion_token_for<void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)> CompletionToken>
-    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, std::chrono::milliseconds timeout, CompletionToken&& token) {
+    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)>(
-            [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}, auto timeout) mutable {
+            [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}, const auto& timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->{{func.func_name}}(
                             {{_format_args_name_and_move(func.inputs)}},
@@ -118,8 +118,8 @@ public:
                                     (*handler_ptr)(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
                                 });
                             },
-                            std::move(timeout),
-                            [handler_ptr] {
+                            timeout,
+                            [handler_ptr] () mutable {
                                 auto ex = asio::get_associated_executor(*handler_ptr);
                                 asio::post(ex, [=, handler_ptr = std::move(handler_ptr)] () mutable -> void {
                                     (*handler_ptr)(std::nullopt);
@@ -127,7 +127,7 @@ public:
                             });
             },
             token,
-            {{_format_args_name_and_move(func.inputs)}}, std::move(timeout));
+            {{_format_args_name_and_move(func.inputs)}}, timeout);
     }
 #endif
 

@@ -394,7 +394,7 @@ public:
 
     template <typename T>
     void send(T&& snd_msgs,
-              std::chrono::milliseconds timeout,
+              const std::chrono::milliseconds& timeout,
               std::function<void()> cb) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
@@ -411,7 +411,7 @@ public:
                 {static_cast<void*>(m_socket), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
                 {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
-            std::chrono::milliseconds interval(200);
+            std::chrono::milliseconds interval(100);
             std::multimap<std::chrono::system_clock::time_point, std::function<void()>> timeout_task;
             while (m_running.load()) {
                 zmq::poll(items, interval);
@@ -733,7 +733,7 @@ public:
 
     void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date,
                      std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
-                     std::chrono::milliseconds timeout,
+                     const std::chrono::milliseconds& timeout,
                      std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
@@ -749,7 +749,7 @@ public:
             m_timeout_cb.emplace(req_id, std::move(timeout_cb));
         }
         m_channel->send(std::move(snd_bufs),
-                        std::move(timeout),
+                        timeout,
                         [this, req_id]() mutable {
                             std::unique_lock lk(m_mtx);
 #if __cplusplus >= 202302L
@@ -786,9 +786,9 @@ public:
     }
 
     template <asio::completion_token_for<void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::chrono::milliseconds timeout, CompletionToken&& token) {
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, auto timeout) mutable {
+            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const auto& timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
                     std::move(bank_info), std::move(bank_name), blance, std::move(date),
@@ -798,8 +798,8 @@ public:
                             (*handler_ptr)(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                         });
                     },
-                    std::move(timeout),
-                    [handler_ptr] {
+                    timeout,
+                    [handler_ptr]() mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
                         asio::post(ex, [=, handler_ptr = std::move(handler_ptr)]() mutable -> void {
                             (*handler_ptr)(std::nullopt);
@@ -807,7 +807,7 @@ public:
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(timeout));
+            std::move(bank_info), std::move(bank_name), blance, std::move(date), timeout);
     }
 #endif
 
