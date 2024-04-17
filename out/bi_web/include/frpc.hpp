@@ -709,8 +709,8 @@ inline std::string toString(const BankInfo& value) {
 
 namespace frpc {
 
-enum class HelloWorldClientHelloWorldServer {
-    hello_world,
+enum class HelloWorldClientHelloWorldServer : uint16_t {
+    hello_world = 1,
 
 };
 
@@ -762,7 +762,7 @@ public:
     void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
-        auto buffer = pack<decltype(header)>(std::move(header));
+        auto buffer = pack<decltype(header)>(header);
         auto packet = pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
 
         std::vector<zmq::message_t> snd_bufs;
@@ -781,7 +781,7 @@ public:
                      std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
-        auto buffer = pack<decltype(header)>(std::move(header));
+        auto buffer = pack<decltype(header)>(header);
         auto packet = pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
 
         std::vector<zmq::message_t> snd_bufs;
@@ -1071,9 +1071,9 @@ private:
 
 namespace frpc {
 
-enum class HelloWorldSenderHelloWorldReceiver {
-    hello_world,
-    notice,
+enum class HelloWorldSenderHelloWorldReceiver : uint16_t {
+    hello_world = 1,
+    notice = 2,
 
 };
 
@@ -1395,8 +1395,8 @@ private:
 
 namespace frpc {
 
-enum class StreamClientStreamServer {
-    hello_world,
+enum class StreamClientStreamServer : uint16_t {
+    hello_world = 1,
 
 };
 
@@ -1464,7 +1464,7 @@ public:
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, StreamClientStreamServer::hello_world);
 
-        auto buffer = pack<decltype(header)>(std::move(header));
+        auto buffer = pack<decltype(header)>(header);
         std::string header_str((char*)buffer.data(), buffer.size());
 
         auto stream_ptr = std::make_shared<Stream<void(std::string)>>(

@@ -1,8 +1,8 @@
 namespace {{node.property.namespace}} {
 
-enum class {{value.caller}}{{value.callee}} {
+enum class {{value.caller}}{{value.callee}} : uint16_t {
     {% for func in value.definitions %}
-        {{func.func_name}},
+        {{func.func_name}} = {{ loop.index1 }},
     {% endfor %}
 
 };
@@ -51,7 +51,7 @@ public:
         void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) {
             auto req_id = m_req_id.fetch_add(1);
             auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
-            auto buffer = pack<decltype(header)>(std::move(header));
+            auto buffer = pack<decltype(header)>(header);
             auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
 
             std::vector<zmq::message_t> snd_bufs;
@@ -70,7 +70,7 @@ public:
             std::function<void()> timeout_cb) {
             auto req_id = m_req_id.fetch_add(1);
             auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
-            auto buffer = pack<decltype(header)>(std::move(header));
+            auto buffer = pack<decltype(header)>(header);
             auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
 
             std::vector<zmq::message_t> snd_bufs;

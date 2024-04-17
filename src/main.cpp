@@ -1,8 +1,6 @@
 #include <cstdint>
-#include <iostream>
-#include <ranges>
-#include <regex>
 #include <random>
+#include <unordered_map>
 
 #include <spdlog/spdlog.h>
 #include <yaml-cpp/yaml.h>
@@ -10,17 +8,6 @@
 
 #include "cmdline.h"
 #include "utils.h"
-
-auto extract(const std::string& input) {
-    std::regex pattern("<(.*?)>");
-    std::smatch matches;
-    if (!std::regex_search(input, matches, pattern)) {
-        spdlog::error("extracted [{}] error.", input);
-        exit(1);
-    }
-    std::string extracted_string = matches[1].str();
-    return extracted_string;
-}
 
 std::string toCppType(std::string type) {
     auto convert = [](const auto& type) {
@@ -61,24 +48,6 @@ std::string toCppType(std::string type) {
     if (type.starts_with("option"))
         type = std::format("std::optional<{}>", convert(extract(type)));
     return convert(type);
-}
-
-auto toSnakeCase(const std::string& s) {
-    std::regex words_regex("[A-Z][a-z]+");
-    auto words_begin = std::sregex_iterator(s.begin(), s.end(), words_regex);
-    auto words_end = std::sregex_iterator();
-    std::string name{};
-    for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-        std::smatch match = *i;
-        std::string match_str = match.str();
-        std::transform(match_str.begin(), match_str.end(), match_str.begin(), ::tolower);
-        auto z = i;
-        if (++z == words_end)
-            name += match_str;
-        else
-            name += (match_str + "_");
-    }
-    return name;
 }
 
 auto _snake(inja::Arguments& args) {

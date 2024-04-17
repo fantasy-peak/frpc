@@ -1,8 +1,8 @@
 namespace {{node.property.namespace}} {
 
-enum class {{value.caller}}{{value.callee}} {
+enum class {{value.caller}}{{value.callee}} : uint16_t {
     {% for func in value.definitions %}
-        {{func.func_name}},
+        {{func.func_name}} = {{ loop.index1 }},
     {% endfor %}
 
 };
@@ -73,7 +73,7 @@ public:
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
 
-        auto buffer = pack<decltype(header)>(std::move(header));
+        auto buffer = pack<decltype(header)>(header);
         std::string header_str((char*)buffer.data(), buffer.size());
 
         auto stream_ptr = std::make_shared<Stream<void({{_format_args_type(func.inputs)}})>>(

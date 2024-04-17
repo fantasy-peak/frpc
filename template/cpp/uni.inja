@@ -1,8 +1,8 @@
 namespace {{node.property.namespace}} {
 
-enum class {{value.caller}}{{value.callee}} {
+enum class {{value.caller}}{{value.callee}} : uint16_t {
     {% for func in value.definitions %}
-        {{func.func_name}},
+        {{func.func_name}} = {{ loop.index1 }},
     {% endfor %}
 
 };
