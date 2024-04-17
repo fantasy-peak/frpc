@@ -68,23 +68,7 @@ public:
                 m_cb.emplace(req_id, std::move(cb));
                 m_timeout_cb.emplace(req_id, std::move(timeout_cb));
             }
-            m_channel->send(std::move(snd_bufs),
-                timeout,
-                [this, req_id]() mutable {
-                std::unique_lock lk(m_mtx);
-#if __cplusplus >= 202302L
-                if (!m_cb.contains(req_id) || !m_timeout_cb.contains(req_id))
-                    return;
-#else
-                if (m_cb.find(req_id) == m_cb.end() || m_timeout_cb.find(req_id) == m_timeout_cb.end())
-                    return;
-#endif
-                auto cb = std::move(m_timeout_cb[req_id]);
-                m_timeout_cb.erase(req_id);
-                m_cb.erase(req_id);
-                lk.unlock();
-                cb();
-            });
+            m_channel->send(std::move(snd_bufs), timeout, [this, req_id] { callTimeoutCallback(req_id); });
         }
 #ifdef __cpp_impl_coroutine
     template <asio::completion_token_for<void({{_format_args_type(func.outputs)}})> CompletionToken>
@@ -140,6 +124,17 @@ public:
     }
 
 private:
+    void callTimeoutCallback(uint64_t req_id) {
+        std::unique_lock lk(m_mtx);
+        if (m_timeout_cb.find(req_id) == m_timeout_cb.end())
+            return;
+        auto cb = std::move(m_timeout_cb[req_id]);
+        m_timeout_cb.erase(req_id);
+        m_cb.erase(req_id);
+        lk.unlock();
+        cb();
+    }
+
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
             m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
@@ -147,22 +142,17 @@ private:
         }
         try {
             auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[0].data(), recv_bufs[0].size());
+            std::unique_lock lk(m_mtx);
+            if (m_cb.find(req_id) == m_cb.end())
+                return;
+            auto cb = std::move(m_cb[req_id]);
+            m_cb.erase(req_id);
+            m_timeout_cb.erase(req_id);
+            lk.unlock();
             switch(req_type) {
             {% for func in value.definitions %}
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
                     auto [{{_format_args_name(func.outputs)}}] = unpack<std::tuple<{{_format_args_type(func.outputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
-                    std::unique_lock lk(m_mtx);
-#if __cplusplus >= 202302L
-                    if (!m_cb.contains(req_id))
-                        break;
-#else
-                    if (m_cb.find(req_id) == m_cb.end())
-                        break;
-#endif
-                    auto cb = std::move(m_cb[req_id]);
-                    m_cb.erase(req_id);
-                    m_timeout_cb.erase(req_id);
-                    lk.unlock();
                     auto callback = std::any_cast<std::function<void({{_format_args_type(func.outputs)}})>>(cb);
                     callback({{_format_args_name_and_move(func.outputs)}});
                     break;

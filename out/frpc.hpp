@@ -748,23 +748,9 @@ public:
             m_cb.emplace(req_id, std::move(cb));
             m_timeout_cb.emplace(req_id, std::move(timeout_cb));
         }
-        m_channel->send(std::move(snd_bufs),
-                        timeout,
-                        [this, req_id]() mutable {
-                            std::unique_lock lk(m_mtx);
-#if __cplusplus >= 202302L
-                            if (!m_cb.contains(req_id) || !m_timeout_cb.contains(req_id))
-                                return;
-#else
-            if (m_cb.find(req_id) == m_cb.end() || m_timeout_cb.find(req_id) == m_timeout_cb.end())
-                return;
-#endif
-                            auto cb = std::move(m_timeout_cb[req_id]);
-                            m_timeout_cb.erase(req_id);
-                            m_cb.erase(req_id);
-                            lk.unlock();
-                            cb();
-                        });
+        m_channel->send(std::move(snd_bufs), timeout, [this, req_id] {
+            callTimeoutCallback(req_id);
+        });
     }
 #ifdef __cpp_impl_coroutine
     template <asio::completion_token_for<void(std::string, Info, uint64_t, std::optional<std::string>)> CompletionToken>
@@ -817,6 +803,17 @@ public:
     }
 
 private:
+    void callTimeoutCallback(uint64_t req_id) {
+        std::unique_lock lk(m_mtx);
+        if (m_timeout_cb.find(req_id) == m_timeout_cb.end())
+            return;
+        auto cb = std::move(m_timeout_cb[req_id]);
+        m_timeout_cb.erase(req_id);
+        m_cb.erase(req_id);
+        lk.unlock();
+        cb();
+    }
+
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
             m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
@@ -824,21 +821,16 @@ private:
         }
         try {
             auto [req_id, req_type] = unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[0].data(), recv_bufs[0].size());
+            std::unique_lock lk(m_mtx);
+            if (m_cb.find(req_id) == m_cb.end())
+                return;
+            auto cb = std::move(m_cb[req_id]);
+            m_cb.erase(req_id);
+            m_timeout_cb.erase(req_id);
+            lk.unlock();
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
                     auto [reply, info, count, date] = unpack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(recv_bufs[1].data(), recv_bufs[1].size());
-                    std::unique_lock lk(m_mtx);
-#if __cplusplus >= 202302L
-                    if (!m_cb.contains(req_id))
-                        break;
-#else
-                    if (m_cb.find(req_id) == m_cb.end())
-                        break;
-#endif
-                    auto cb = std::move(m_cb[req_id]);
-                    m_cb.erase(req_id);
-                    m_timeout_cb.erase(req_id);
-                    lk.unlock();
                     auto callback = std::any_cast<std::function<void(std::string, Info, uint64_t, std::optional<std::string>)>>(cb);
                     callback(std::move(reply), std::move(info), count, std::move(date));
                     break;
@@ -1457,29 +1449,30 @@ private:
                     recv_bufs[2] = zmq::message_t(is_close_buffer.data(), is_close_buffer.size());
                     auto ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
 
-                    auto out = std::make_shared<Stream<void(std::string)>>([ptr, this](std::string reply) mutable {
-                        auto& recv_bufs = *ptr;
-                        auto packet = pack<std::tuple<std::string>>(std::make_tuple(std::move(reply)));
-                        auto close = pack<bool>(false);
-                        std::vector<zmq::message_t> snd_bufs;
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
-                        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
-                        m_channel->send(snd_bufs);
-                    },
-                                                                           [ptr, this, req_id, channel_ptr]() mutable {
-                                                                               auto& recv_bufs = *ptr;
-                                                                               std::vector<zmq::message_t> snd_bufs;
-                                                                               snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                                                                               snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
-                                                                               snd_bufs.emplace_back(zmq::message_t("C", 1));
-                                                                               m_channel->send(snd_bufs);
-                                                                               channel_ptr->close();
-                                                                               {
-                                                                                   std::lock_guard lk(m_mtx);
-                                                                                   m_channel_mapping.erase(req_id);
-                                                                               }
-                                                                           });
+                    auto out = std::make_shared<Stream<void(std::string)>>(
+                        [ptr, this](std::string reply) mutable {
+                            auto& recv_bufs = *ptr;
+                            auto packet = pack<std::tuple<std::string>>(std::make_tuple(std::move(reply)));
+                            auto close = pack<bool>(false);
+                            std::vector<zmq::message_t> snd_bufs;
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
+                            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+                            m_channel->send(std::move(snd_bufs));
+                        },
+                        [ptr, this, req_id, channel_ptr]() mutable {
+                            auto& recv_bufs = *ptr;
+                            std::vector<zmq::message_t> snd_bufs;
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
+                            snd_bufs.emplace_back(zmq::message_t("C", 1));
+                            m_channel->send(std::move(snd_bufs));
+                            channel_ptr->close();
+                            {
+                                std::lock_guard lk(m_mtx);
+                                m_channel_mapping.erase(req_id);
+                            }
+                        });
                     std::visit([&](auto&& arg) mutable {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<StreamServerHandler>>) {

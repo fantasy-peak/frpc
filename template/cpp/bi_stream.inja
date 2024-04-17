@@ -233,28 +233,30 @@ private:
                     recv_bufs[2] = zmq::message_t(is_close_buffer.data(), is_close_buffer.size());
                     auto ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
 
-                    auto out = std::make_shared<Stream<void({{_format_args_type(func.outputs)}})>>([ptr, this] ({{_format_args(func.outputs)}}) mutable {
-                        auto& recv_bufs = *ptr;
-                        auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
-                        auto close = pack<bool>(false);
-                        std::vector<zmq::message_t> snd_bufs;
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
-                        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
-                        m_channel->send(snd_bufs);
-                    }, [ptr, this, req_id, channel_ptr] () mutable {
-                        auto& recv_bufs = *ptr;
-                        std::vector<zmq::message_t> snd_bufs;
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                        snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
-                        snd_bufs.emplace_back(zmq::message_t("C", 1));
-                        m_channel->send(snd_bufs);
-                        channel_ptr->close();
-                        {
-                            std::lock_guard lk(m_mtx);
-                            m_channel_mapping.erase(req_id);
-                        }
-                    });
+                    auto out = std::make_shared<Stream<void({{_format_args_type(func.outputs)}})>>(
+                        [ptr, this] ({{_format_args(func.outputs)}}) mutable {
+                            auto& recv_bufs = *ptr;
+                            auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                            auto close = pack<bool>(false);
+                            std::vector<zmq::message_t> snd_bufs;
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
+                            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+                            m_channel->send(std::move(snd_bufs));
+                        }, 
+                        [ptr, this, req_id, channel_ptr] () mutable {
+                            auto& recv_bufs = *ptr;
+                            std::vector<zmq::message_t> snd_bufs;
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
+                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
+                            snd_bufs.emplace_back(zmq::message_t("C", 1));
+                            m_channel->send(std::move(snd_bufs));
+                            channel_ptr->close();
+                            {
+                                std::lock_guard lk(m_mtx);
+                                m_channel_mapping.erase(req_id);
+                            }
+                        });
                     std::visit([&](auto&& arg) mutable {
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
