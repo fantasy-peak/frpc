@@ -13,11 +13,11 @@ void start(std::function<void()> func) {
 
 #ifdef __cpp_impl_coroutine
 struct CoroHelloWorldReceiver final : public frpc::CoroHelloWorldReceiverHandler {
-    virtual asio::awaitable<void> hello_world(std::string in) override {
+    virtual asio::awaitable<void> hello_world(std::string in) noexcept override {
         spdlog::info("CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
     }
-    virtual asio::awaitable<void> notice(int32_t in, std::string info) override {
+    virtual asio::awaitable<void> notice(int32_t in, std::string info) noexcept override {
         spdlog::info("CoroHelloWorldReceiver::notice: {}: {}", in, info);
         co_return;
     }
@@ -29,11 +29,11 @@ struct HelloWorldReceiverHandler final : public frpc::HelloWorldReceiverHandler 
         : label(label) {
     }
 
-    virtual void hello_world(std::string in) override {
+    virtual void hello_world(std::string in) noexcept override {
         spdlog::info("HelloWorldReceiverHandler::hello_world: {}, {}", label, in);
         return;
     }
-    virtual void notice(int32_t in, std::string info) override {
+    virtual void notice(int32_t in, std::string info) noexcept override {
         spdlog::info("HelloWorldReceiverHandler::notice: {}, {}: {}", label, in, info);
         return;
     }

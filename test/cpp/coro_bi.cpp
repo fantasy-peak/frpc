@@ -31,7 +31,7 @@ struct CoroHandler final : public frpc::CoroHelloWorldServerHandler {
                                               std::string bank_name,
                                               uint64_t blance,
                                               std::optional<std::string> date,
-                                              std::function<void(std::string, frpc::Info, uint64_t, std::optional<std::string>)> cb) override {
+                                              std::function<void(std::string, frpc::Info, uint64_t, std::optional<std::string>)> cb) noexcept override {
         spdlog::info("coro frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
                      frpc::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
         frpc::Info info;

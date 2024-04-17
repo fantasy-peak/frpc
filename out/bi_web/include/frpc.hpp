@@ -864,14 +864,14 @@ private:
 };
 
 struct HelloWorldServerHandler {
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 };
 
 struct CoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
+    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #endif
 };
 
@@ -1007,20 +1007,20 @@ MSGPACK_ADD_ENUM(frpc::HelloWorldSenderHelloWorldReceiver)
 namespace frpc {
 
 struct HelloWorldReceiverHandler {
-    virtual void hello_world(std::string in) = 0;
-    virtual void notice(int32_t in, std::string info) = 0;
+    virtual void hello_world(std::string in) noexcept = 0;
+    virtual void notice(int32_t in, std::string info) noexcept = 0;
 };
 
 struct CoroHelloWorldReceiverHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(std::string in) = 0;
+    virtual asio::awaitable<void> hello_world(std::string in) noexcept = 0;
 #else
-    virtual void hello_world(std::string in) = 0;
+    virtual void hello_world(std::string in) noexcept = 0;
 #endif
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> notice(int32_t in, std::string info) = 0;
+    virtual asio::awaitable<void> notice(int32_t in, std::string info) noexcept = 0;
 #else
-    virtual void notice(int32_t in, std::string info) = 0;
+    virtual void notice(int32_t in, std::string info) noexcept = 0;
 #endif
 };
 
@@ -1366,16 +1366,16 @@ private:
 
 struct StreamServerHandler {
     virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                             std::shared_ptr<Stream<void(std::string)>>) = 0;
+                             std::shared_ptr<Stream<void(std::string)>>) noexcept = 0;
 };
 
 struct CoroStreamServerHandler {
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                                              std::shared_ptr<Stream<void(std::string)>>) = 0;
+                                              std::shared_ptr<Stream<void(std::string)>>) noexcept = 0;
 #else
     virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                             std::shared_ptr<Stream<void(std::string)>>) = 0;
+                             std::shared_ptr<Stream<void(std::string)>>) noexcept = 0;
 #endif
 };
 

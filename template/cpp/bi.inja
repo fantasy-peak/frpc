@@ -190,16 +190,16 @@ private:
 
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
-        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
     {% endfor %}
 };
 
 struct Coro{{value.callee}}Handler {
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
-        virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+        virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
 #else
-        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) = 0;
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
 #endif
     {% endfor %}
 };

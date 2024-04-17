@@ -14,7 +14,7 @@ void start(std::function<void()> func) {
 #ifdef __cpp_impl_coroutine
 struct CoroStreamServerHandler final : public frpc::CoroStreamServerHandler {
     virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>> ins,
-                                              std::shared_ptr<frpc::Stream<void(std::string)>> outs) {
+                                              std::shared_ptr<frpc::Stream<void(std::string)>> outs) noexcept override {
         start([outs = std::move(outs)]() mutable {
             for (int i = 0; i < 5; i++) {
                 outs->operator()(std::string("stream_server_") + std::to_string(i));

@@ -140,7 +140,7 @@ private:
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
     virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
     {% endfor %}
 };
 
@@ -148,10 +148,10 @@ struct Coro{{value.callee}}Handler {
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #else
     virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) = 0;
+        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #endif
     {% endfor %}
 };
@@ -194,7 +194,7 @@ public:
     }
 
 private:
-    void dispatch(std::vector<zmq::message_t>& recv_bufs)  {
+    void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 3) {
             m_error(FRPC_ERROR_FORMAT("server recv invalid stream client request packets!!!"));
             return;
