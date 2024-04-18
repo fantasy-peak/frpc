@@ -1,9 +1,15 @@
+#include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <random>
 #include <unordered_map>
 
 #include <spdlog/spdlog.h>
 #include <yaml-cpp/yaml.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/topological_sort.hpp>
+#include <boost/unordered_map.hpp>
 #include <inja/inja.hpp>
 
 #include "cmdline.h"
@@ -199,6 +205,109 @@ void formatCode(const std::string& file, const std::string& content) {
     write << result;
 }
 
+auto sort(nlohmann::json json) {
+    static std::unordered_map<std::string, std::string> base_type{
+        {"bool", "bool"},
+        {"int8_t", "int8_t"},
+        {"uint8_t", "uint8_t"},
+        {"int16_t", "int16_t"},
+        {"uint16_t", "uint16_t"},
+        {"int32_t", "int32_t"},
+        {"uint32_t", "uint32_t"},
+        {"int64_t", "int64_t"},
+        {"uint64_t", "uint64_t"},
+        {"float", "float"},
+        {"double", "double"},
+        {"std::string", "std::string"},
+    };
+    nlohmann::json enum_json, struct_json, interface_json;
+    for (auto& j : json) {
+        auto type = j["type"].get<std::string>();
+        if (type == "enum") {
+            enum_json.emplace_back(std::move(j));
+        } else if (type == "struct") {
+            struct_json.emplace_back(std::move(j));
+        } else if (type == "interface") {
+            interface_json.emplace_back(std::move(j));
+        } else {
+            spdlog::error("Unexpected type");
+            exit(1);
+        }
+    }
+
+    auto check = [&](const std::string& type) {
+        if (base_type.contains(type))
+            return true;
+        for (auto& e_json : enum_json) {
+            if (e_json["enum_name"].get<std::string>() == type)
+                return true;
+        }
+        return false;
+    };
+
+    typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS> Graph;
+    Graph g;
+    boost::unordered_map<std::string, Graph::vertex_descriptor> vertex_map;
+
+    std::unordered_map<std::string, nlohmann::json> struct_json_map;
+    for (auto& j : struct_json) {
+        auto struct_name = j["struct_name"].get<std::string>();
+        struct_json_map.emplace(struct_name, std::move(j));
+        vertex_map[struct_name] = boost::add_vertex(g);
+    }
+    for (auto& [struct_name, j] : struct_json_map) {
+        auto& definitions = j["definitions"];
+        for (auto& field : definitions) {
+            auto type = field["type"].get<std::string>();
+            boost::trim(type);
+            if (check(type))
+                continue;
+            if (type.starts_with("std::unordered_map")) {
+                auto extract_str = extract(type);
+                auto types = extract(type) |
+                             std::views::split(',') |
+                             std::views::transform([](auto&& rng) {
+                                 return std::string(&*rng.begin(), std::ranges::distance(rng.begin(), rng.end()));
+                             }) |
+                             to<std::vector<std::string>>();
+                if (types.size() != 2) {
+                    spdlog::error("invalid: [{}]", type);
+                    exit(1);
+                }
+                boost::trim(types[0]);
+                boost::trim(types[1]);
+                if (!check(types[0]))
+                    boost::add_edge(vertex_map[struct_name], vertex_map[types[0]], g);
+                if (!check(types[1]))
+                    boost::add_edge(vertex_map[struct_name], vertex_map[types[1]], g);
+            } else if (type.starts_with("std::vector") || type.starts_with("std::option")) {
+                auto extract_str = extract(type);
+                boost::trim(extract_str);
+                if (!check(extract_str))
+                    boost::add_edge(vertex_map[struct_name], vertex_map[extract_str], g);
+            } else {
+                boost::add_edge(vertex_map[struct_name], vertex_map[type], g);
+            }
+        }
+    }
+    std::vector<Graph::vertex_descriptor> sorted_vertices;
+    boost::topological_sort(g, std::back_inserter(sorted_vertices));
+    for (auto it = sorted_vertices.begin(); it != sorted_vertices.end(); ++it) {
+        auto it1 = std::ranges::find_if(vertex_map, [&](auto& p) {
+            auto& [k, v] = p;
+            return v == *it;
+        });
+        if (it1 != vertex_map.end()) {
+            spdlog::info("{}", it1->first);
+            enum_json.emplace_back(std::move(struct_json_map[it1->first]));
+        }
+    }
+    for (auto& j : interface_json) {
+        enum_json.emplace_back(std::move(j));
+    }
+    return enum_json;
+}
+
 auto parseYaml(const std::string& file) {
     YAML::Node config = YAML::LoadFile(file);
     nlohmann::json ast;
@@ -276,8 +385,9 @@ int main(int argc, char** argv) {
     a.add<std::string>("filename", 'f', "input yaml yaml file", true, "");
     a.add<std::string>("template", 't', "template directory", true, "");
     a.add<std::string>("output", 'o', "output directory", true, "");
-    a.add<std::string>("lang", 'l', "Language", false, "cpp");
+    a.add<std::string>("lang", 'l', "language", false, "cpp");
     a.add<std::string>("web_template", 'w', "web template directory", false, "");
+    a.add<bool>("auto_sort", 's', "automatically sort structural dependencies", false, false);
     a.parse_check(argc, argv);
 
     auto filename = a.get<std::string>("filename");
@@ -285,6 +395,7 @@ int main(int argc, char** argv) {
     auto output = a.get<std::string>("output");
     auto lang = a.get<std::string>("lang");
     auto web_template = a.get<std::string>("web_template");
+    auto auto_sort = a.get<bool>("auto_sort");
 
     spdlog::info("filename: {}", filename);
     if (injia_template.back() == '/')
@@ -293,8 +404,11 @@ int main(int argc, char** argv) {
     spdlog::info("template: {}", injia_template);
     spdlog::info("output: {}", output);
     spdlog::info("lang: {}", lang);
+    spdlog::info("auto_sort: {}", auto_sort);
 
     nlohmann::json data = parseYaml(filename);
+    if (auto_sort)
+        data["node"]["value"] = sort(std::move(data["node"]["value"]));
     // spdlog::info("{}", data.dump(4));
 
     inja::Environment env;
