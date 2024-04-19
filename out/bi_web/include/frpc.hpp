@@ -373,6 +373,10 @@ public:
         m_running = false;
         if (m_thread.joinable())
             m_thread.join();
+        if (m_monitor_socket_ptr) {
+            auto socket_ptr = static_cast<void*>(m_monitor_socket_ptr.get());
+            zmq_socket_monitor(socket_ptr, nullptr, 0);
+        }
     }
 
     template <typename T>
@@ -395,6 +399,20 @@ public:
         m_timeout_task.emplace(timeout_point, std::move(cb));
     }
 
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        if (m_monitor_socket_ptr || m_running.load())
+            return true;
+        m_monitor_socket_ptr = std::make_shared<zmq::socket_t>(*m_context_ptr, zmq::socket_type::pair);
+        auto endpoint = uniqueAddr();
+        int rc = zmq_socket_monitor(static_cast<void*>(*m_socket_ptr), endpoint.c_str(), events);
+        if (rc != 0) {
+            return false;
+        }
+        m_monitor_socket_ptr->connect(endpoint);
+        m_monitor_callback = std::move(cb);
+        return true;
+    }
+
     void start() {
         m_running = true;
         m_thread = std::thread([this] {
@@ -402,6 +420,8 @@ public:
                 {static_cast<void*>(*m_socket_ptr), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
                 {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
+            if (m_monitor_socket_ptr)
+                items.emplace_back(zmq::pollitem_t{static_cast<void*>(*(m_monitor_socket_ptr)), 0, ZMQ_POLLIN, 0});
             std::chrono::milliseconds interval(100);
             std::multimap<std::chrono::system_clock::time_point, std::function<void()>> timeout_task;
             while (m_running.load()) {
@@ -442,6 +462,19 @@ public:
                 while (!timeout_task.empty() && timeout_task.begin()->first <= now) {
                     (timeout_task.begin()->second)();
                     timeout_task.erase(timeout_task.begin());
+                }
+                if (m_monitor_socket_ptr && (items[2].revents & ZMQ_POLLIN)) {
+                    zmq::message_t event_msg;
+                    if (!m_monitor_socket_ptr->recv(event_msg))
+                        continue;
+                    zmq::message_t addr_msg;
+                    if (!m_monitor_socket_ptr->recv(addr_msg))
+                        continue;
+                    zmq_event_t event;
+                    const char* data = static_cast<const char*>(event_msg.data());
+                    std::memcpy(&event.event, data, sizeof(uint16_t));
+                    std::memcpy(&event.value, data + sizeof(uint16_t), sizeof(int32_t));
+                    m_monitor_callback(std::make_tuple(event, std::string(static_cast<const char*>(addr_msg.data()), addr_msg.size())));
                 }
             }
         });
@@ -504,6 +537,8 @@ private:
     std::atomic_bool m_running{false};
     std::mutex m_mutex;
     std::multimap<std::chrono::system_clock::time_point, std::function<void()>> m_timeout_task;
+    std::function<void(std::tuple<zmq_event_t, std::string>)> m_monitor_callback;
+    std::shared_ptr<zmq::socket_t> m_monitor_socket_ptr{nullptr};
 };
 
 } // namespace frpc
@@ -547,6 +582,24 @@ public:
         m_running = false;
         if (m_thread.joinable())
             m_thread.join();
+        if (m_monitor_socket_ptr) {
+            auto socket_ptr = static_cast<void*>(m_monitor_socket_ptr.get());
+            zmq_socket_monitor(socket_ptr, nullptr, 0);
+        }
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        if (m_monitor_socket_ptr || m_running.load())
+            return true;
+        m_monitor_socket_ptr = std::make_shared<zmq::socket_t>(*m_context_ptr, zmq::socket_type::pair);
+        auto endpoint = uniqueAddr();
+        int rc = zmq_socket_monitor(static_cast<void*>(*m_socket_ptr), endpoint.c_str(), events);
+        if (rc != 0) {
+            return false;
+        }
+        m_monitor_socket_ptr->connect(endpoint);
+        m_monitor_callback = std::move(cb);
+        return true;
     }
 
     void start() {
@@ -555,7 +608,9 @@ public:
             std::vector<zmq::pollitem_t> items{
                 {static_cast<void*>(*m_socket_ptr), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
             };
-            std::chrono::milliseconds interval(200);
+            if (m_monitor_socket_ptr)
+                items.emplace_back(zmq::pollitem_t{static_cast<void*>(*(m_monitor_socket_ptr)), 0, ZMQ_POLLIN, 0});
+            std::chrono::milliseconds interval(100);
             while (m_running.load()) {
                 zmq::poll(items, interval);
                 if (items[0].revents & ZMQ_POLLIN) {
@@ -566,6 +621,19 @@ public:
                         break;
                     }
                     m_cb(recv_msgs);
+                }
+                if (m_monitor_socket_ptr && (items[1].revents & ZMQ_POLLIN)) {
+                    zmq::message_t event_msg;
+                    if (!m_monitor_socket_ptr->recv(event_msg))
+                        continue;
+                    zmq::message_t addr_msg;
+                    if (!m_monitor_socket_ptr->recv(addr_msg))
+                        continue;
+                    zmq_event_t event;
+                    const char* data = static_cast<const char*>(event_msg.data());
+                    std::memcpy(&event.event, data, sizeof(uint16_t));
+                    std::memcpy(&event.value, data + sizeof(uint16_t), sizeof(int32_t));
+                    m_monitor_callback(std::make_tuple(event, std::string(static_cast<const char*>(addr_msg.data()), addr_msg.size())));
                 }
             }
         });
@@ -606,6 +674,8 @@ private:
     std::function<void(std::string)> m_error;
     std::atomic_bool m_running;
     std::thread m_thread;
+    std::function<void(std::tuple<zmq_event_t, std::string>)> m_monitor_callback;
+    std::shared_ptr<zmq::socket_t> m_monitor_socket_ptr{nullptr};
 };
 
 } // namespace frpc
@@ -757,6 +827,10 @@ public:
 
     decltype(auto) context() {
         return m_channel->context();
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
     }
 
     void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
@@ -980,6 +1054,10 @@ public:
 
     auto& context() {
         return m_channel->context();
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
     }
 
     void start() {
@@ -1216,6 +1294,10 @@ public:
         if (config.socktype == zmq::socket_type::sub)
             config.bind = false;
         return std::make_unique<HelloWorldReceiver>(config, context_ptr, std::move(handler), std::move(error));
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
     }
 
 private:
@@ -1511,6 +1593,10 @@ public:
         return std::make_unique<StreamClient>(config, context_ptr, std::move(error));
     }
 
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
+    }
+
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
@@ -1656,6 +1742,10 @@ public:
         config.socktype = zmq::socket_type::router;
         config.bind = true;
         return std::make_unique<StreamServer>(config, context_ptr, std::move(handler), std::move(error));
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
     }
 
 private:

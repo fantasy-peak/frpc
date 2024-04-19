@@ -120,6 +120,10 @@ public:
         return std::make_unique<{{value.caller}}>(config, context_ptr, std::move(error));
     }
 
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
+    }
+
 private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
@@ -265,6 +269,10 @@ public:
         config.socktype = zmq::socket_type::router;
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, context_ptr, std::move(handler), std::move(error));
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
     }
 
 private:

@@ -46,6 +46,12 @@ void start_server() {
         [](std::string error) {
             spdlog::error("frpc::StreamServer error: {}", error);
         });
+    server->monitor(
+        [](std::tuple<zmq_event_t, std::string> data) {
+            auto& [event, point] = data;
+            spdlog::info("frpc::StreamServer monitor: {} {}", frpc::getEventName(event.event), point);
+        },
+        ZMQ_EVENT_ACCEPTED | ZMQ_EVENT_DISCONNECTED);
     server->start();
     std::this_thread::sleep_for(std::chrono::seconds(12));
 }
@@ -56,6 +62,12 @@ asio::awaitable<void> start_client() {
     auto client = frpc::StreamClient::create(bi_config, [](std::string error) {
         spdlog::error("coro frpc::StreamClient error: {}", error);
     });
+    client->monitor(
+        [](std::tuple<zmq_event_t, std::string> data) {
+            auto& [event, point] = data;
+            spdlog::info("frpc::StreamClient monitor: {} {}", frpc::getEventName(event.event), point);
+        },
+        ZMQ_EVENT_CONNECTED);
     client->start();
 
     auto [tx, rx] = client->hello_world();

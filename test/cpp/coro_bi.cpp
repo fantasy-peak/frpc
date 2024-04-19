@@ -72,6 +72,12 @@ void start_server() {
         [](std::string error) {
             spdlog::error("coro frpc::HelloWorldServer error: {}", error);
         });
+    server->monitor(
+        [](std::tuple<zmq_event_t, std::string> data) {
+            auto& [event, point] = data;
+            spdlog::info("bi coro server monitor: {} {}", frpc::getEventName(event.event), point);
+        },
+        ZMQ_EVENT_ACCEPTED | ZMQ_EVENT_DISCONNECTED);
     server->start();
     std::this_thread::sleep_for(std::chrono::seconds(5));
 }

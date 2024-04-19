@@ -46,6 +46,10 @@ public:
             return m_channel->context();
         }
 
+        bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+            return m_channel->monitor(std::move(cb), events);
+        }
+
     {% for func in value.definitions %}
 
         void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) {
@@ -277,6 +281,10 @@ public:
 
         auto& context() {
             return m_channel->context();
+        }
+
+        bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+            return m_channel->monitor(std::move(cb), events);
         }
 
         void start() {
