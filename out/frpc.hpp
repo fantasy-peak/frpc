@@ -213,6 +213,69 @@ private:
     std::function<void()> m_close;
 };
 
+template <typename T>
+class MpscQueue {
+public:
+    MpscQueue()
+        : head_(new BufferNode)
+        , tail_(head_.load(std::memory_order_relaxed)) {
+    }
+    ~MpscQueue() {
+        T output;
+        while (this->dequeue(output)) {
+        }
+        BufferNode* front = head_.load(std::memory_order_relaxed);
+        delete front;
+    }
+
+    void enqueue(T&& input) {
+        BufferNode* node{new BufferNode(std::move(input))};
+        BufferNode* prevhead{head_.exchange(node, std::memory_order_acq_rel)};
+        prevhead->next_.store(node, std::memory_order_release);
+    }
+    void enqueue(const T& input) {
+        BufferNode* node{new BufferNode(input)};
+        BufferNode* prevhead{head_.exchange(node, std::memory_order_acq_rel)};
+        prevhead->next_.store(node, std::memory_order_release);
+    }
+
+    bool dequeue(T& output) {
+        BufferNode* tail = tail_.load(std::memory_order_relaxed);
+        BufferNode* next = tail->next_.load(std::memory_order_acquire);
+
+        if (next == nullptr) {
+            return false;
+        }
+        output = std::move(*(next->dataPtr_));
+        delete next->dataPtr_;
+        tail_.store(next, std::memory_order_release);
+        delete tail;
+        return true;
+    }
+
+    bool empty() {
+        BufferNode* tail = tail_.load(std::memory_order_relaxed);
+        BufferNode* next = tail->next_.load(std::memory_order_acquire);
+        return next == nullptr;
+    }
+
+private:
+    struct BufferNode {
+        BufferNode() = default;
+        BufferNode(const T& data)
+            : dataPtr_(new T(data)) {
+        }
+        BufferNode(T&& data)
+            : dataPtr_(new T(std::move(data))) {
+        }
+        T* dataPtr_;
+        std::atomic<BufferNode*> next_{nullptr};
+    };
+
+    std::atomic<BufferNode*> head_;
+    std::atomic<BufferNode*> tail_;
+};
+
 } // namespace frpc
 
 namespace frpc {
@@ -338,8 +401,6 @@ public:
               std::function<void(std::vector<zmq::message_t>&)> cb)
         : m_context_ptr(std::make_shared<zmq::context_t>(config.io_threads))
         , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
-        , m_send(*m_context_ptr, zmq::socket_type::push)
-        , m_recv(*m_context_ptr, zmq::socket_type::pull)
         , m_error(std::move(error))
         , m_cb(std::move(cb)) {
         init_socket(config);
@@ -350,8 +411,6 @@ public:
               std::function<void(std::vector<zmq::message_t>&)> cb)
         : m_context_ptr(context_ptr)
         , m_socket_ptr(std::make_shared<zmq::socket_t>(*m_context_ptr, config.socktype))
-        , m_send(*m_context_ptr, zmq::socket_type::push)
-        , m_recv(*m_context_ptr, zmq::socket_type::pull)
         , m_error(std::move(error))
         , m_cb(std::move(cb)) {
         init_socket(config);
@@ -363,8 +422,6 @@ public:
               std::function<void(std::vector<zmq::message_t>&)> cb)
         : m_context_ptr(context_ptr)
         , m_socket_ptr(socket_ptr)
-        , m_send(*m_context_ptr, zmq::socket_type::push)
-        , m_recv(*m_context_ptr, zmq::socket_type::pull)
         , m_error(std::move(error))
         , m_cb(std::move(cb)) {
         init_socket(config);
@@ -381,22 +438,19 @@ public:
 
     template <typename T>
     void send(T&& snd_msgs) {
-        std::lock_guard lk(m_mutex);
-        if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error(FRPC_ERROR_FORMAT("send error!!!"));
-        }
+        m_mpsc_queue.enqueue(std::forward<decltype(snd_msgs)>(snd_msgs));
+        constexpr char c = '\0';
+        ::write(m_wakeup_fd[1], &c, sizeof(c));
     }
 
     template <typename T>
     void send(T&& snd_msgs,
               const std::chrono::milliseconds& timeout,
               std::function<void()> cb) {
-        std::lock_guard lk(m_mutex);
-        if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
-            m_error(FRPC_ERROR_FORMAT("send error!!!"));
-        }
-        auto timeout_point = std::chrono::system_clock::now() + timeout;
-        m_timeout_task.emplace(timeout_point, std::move(cb));
+        m_mpsc_queue.enqueue(std::forward<decltype(snd_msgs)>(snd_msgs));
+        m_timeout_queue.enqueue(std::make_tuple(std::chrono::system_clock::now() + timeout, std::move(cb)));
+        constexpr char c = '\0';
+        ::write(m_wakeup_fd[1], &c, sizeof(c));
     }
 
     bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
@@ -418,7 +472,7 @@ public:
         m_thread = std::thread([this] {
             std::vector<zmq::pollitem_t> items{
                 {static_cast<void*>(*m_socket_ptr), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
-                {static_cast<void*>(m_recv), 0, ZMQ_POLLIN | ZMQ_POLLERR, 0},
+                {nullptr, m_wakeup_fd[0], ZMQ_POLLIN, 0},
             };
             if (m_monitor_socket_ptr)
                 items.emplace_back(zmq::pollitem_t{static_cast<void*>(*(m_monitor_socket_ptr)), 0, ZMQ_POLLIN, 0});
@@ -439,26 +493,29 @@ public:
                 }
                 if (items[1].revents & ZMQ_POLLIN) {
                     try {
-                        recv_msgs.clear();
-                        auto ret = zmq::recv_multipart(m_recv, std::back_inserter(recv_msgs));
-                        if (!ret) {
-                            m_error(FRPC_ERROR_FORMAT("recv zmq::recv_multipart error!!!"));
+                        char c;
+                        if (::read(m_wakeup_fd[0], &c, sizeof(c)) == -1) {
+                            m_error(FRPC_ERROR_FORMAT("read pipe error!!!"));
                             break;
                         }
-                        if (!zmq::send_multipart(*m_socket_ptr, recv_msgs)) {
-                            m_error(FRPC_ERROR_FORMAT("zmq::send_multipart error!!!"));
-                            break;
+                        for (;;) {
+                            recv_msgs.clear();
+                            if (!m_mpsc_queue.dequeue(recv_msgs))
+                                break;
+                            if (!zmq::send_multipart(*m_socket_ptr, recv_msgs)) {
+                                m_error(FRPC_ERROR_FORMAT("zmq::send_multipart error!!!"));
+                                return;
+                            }
                         }
                     } catch (const zmq::error_t& e) {
                         m_error(FRPC_ERROR_FORMAT(std::string{"BiChannel error "} + e.what()));
                     }
                 }
-                {
-                    std::lock_guard<std::mutex> lk(m_mutex);
-                    if (!m_timeout_task.empty()) {
-                        timeout_task.merge(m_timeout_task);
-                        m_timeout_task.clear();
-                    }
+                for (;;) {
+                    std::tuple<std::chrono::system_clock::time_point, std::function<void()>> tp;
+                    if (!m_timeout_queue.dequeue(tp))
+                        break;
+                    timeout_task.emplace(std::get<0>(tp), std::get<1>(tp));
                 }
                 auto now = std::chrono::system_clock::now();
                 while (!timeout_task.empty() && timeout_task.begin()->first <= now) {
@@ -492,6 +549,10 @@ public:
 
 private:
     void init_socket(const ChannelConfig& config) {
+        auto r = pipe(m_wakeup_fd);
+        assert(!r);
+        fcntl(m_wakeup_fd[0], F_SETFL, O_NONBLOCK | O_CLOEXEC);
+        fcntl(m_wakeup_fd[1], F_SETFL, O_NONBLOCK | O_CLOEXEC);
         m_socket_ptr->set(zmq::sockopt::sndhwm, config.sendhwm);
         m_socket_ptr->set(zmq::sockopt::rcvhwm, config.recvhwm);
         m_socket_ptr->set(zmq::sockopt::sndbuf, config.sendbuf);
@@ -517,22 +578,10 @@ private:
         } else {
             m_socket_ptr->connect(config.addr);
         }
-        auto addr = uniqueAddr();
-        m_recv.set(zmq::sockopt::rcvhwm, config.recvhwm);
-        m_recv.set(zmq::sockopt::rcvbuf, config.recvbuf);
-        m_recv.bind(addr);
-
-        m_send.set(zmq::sockopt::sndhwm, config.sendhwm);
-        m_send.set(zmq::sockopt::sndbuf, config.sendbuf);
-        m_send.set(zmq::sockopt::linger, config.linger);
-
-        m_send.connect(addr);
     }
 
     std::shared_ptr<zmq::context_t> m_context_ptr;
     std::shared_ptr<zmq::socket_t> m_socket_ptr;
-    zmq::socket_t m_send;
-    zmq::socket_t m_recv;
     std::function<void(std::string)> m_error;
     std::function<void(std::vector<zmq::message_t>&)> m_cb;
     std::thread m_thread;
@@ -541,6 +590,9 @@ private:
     std::multimap<std::chrono::system_clock::time_point, std::function<void()>> m_timeout_task;
     std::function<void(std::tuple<zmq_event_t, std::string>)> m_monitor_callback;
     std::shared_ptr<zmq::socket_t> m_monitor_socket_ptr{nullptr};
+    MpscQueue<std::vector<zmq::message_t>> m_mpsc_queue;
+    MpscQueue<std::tuple<std::chrono::system_clock::time_point, std::function<void()>>> m_timeout_queue;
+    int m_wakeup_fd[2];
 };
 
 } // namespace frpc
