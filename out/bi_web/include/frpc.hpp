@@ -370,7 +370,7 @@ public:
         init_socket(config);
     }
     ~BiChannel() {
-        m_running = false;
+        m_running.store(false, std::memory_order_release);
         if (m_thread.joinable())
             m_thread.join();
         if (m_monitor_socket_ptr) {
@@ -424,10 +424,12 @@ public:
                 items.emplace_back(zmq::pollitem_t{static_cast<void*>(*(m_monitor_socket_ptr)), 0, ZMQ_POLLIN, 0});
             std::chrono::milliseconds interval(100);
             std::multimap<std::chrono::system_clock::time_point, std::function<void()>> timeout_task;
-            while (m_running.load()) {
+            std::vector<zmq::message_t> recv_msgs;
+            recv_msgs.reserve(4);
+            while (m_running.load(std::memory_order_acquire)) {
                 zmq::poll(items, interval);
                 if (items[0].revents & ZMQ_POLLIN) {
-                    std::vector<zmq::message_t> recv_msgs;
+                    recv_msgs.clear();
                     auto ret = zmq::recv_multipart(*m_socket_ptr, std::back_inserter(recv_msgs));
                     if (!ret) {
                         m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
@@ -437,7 +439,7 @@ public:
                 }
                 if (items[1].revents & ZMQ_POLLIN) {
                     try {
-                        std::vector<zmq::message_t> recv_msgs;
+                        recv_msgs.clear();
                         auto ret = zmq::recv_multipart(m_recv, std::back_inserter(recv_msgs));
                         if (!ret) {
                             m_error(FRPC_ERROR_FORMAT("recv zmq::recv_multipart error!!!"));
@@ -579,7 +581,7 @@ public:
     }
 
     ~UniChannel() {
-        m_running = false;
+        m_running.store(false, std::memory_order_release);
         if (m_thread.joinable())
             m_thread.join();
         if (m_monitor_socket_ptr) {
@@ -611,10 +613,11 @@ public:
             if (m_monitor_socket_ptr)
                 items.emplace_back(zmq::pollitem_t{static_cast<void*>(*(m_monitor_socket_ptr)), 0, ZMQ_POLLIN, 0});
             std::chrono::milliseconds interval(100);
-            while (m_running.load()) {
+            std::vector<zmq::message_t> recv_msgs;
+            while (m_running.load(std::memory_order_acquire)) {
                 zmq::poll(items, interval);
                 if (items[0].revents & ZMQ_POLLIN) {
-                    std::vector<zmq::message_t> recv_msgs;
+                    recv_msgs.clear();
                     auto ret = zmq::recv_multipart(*m_socket_ptr, std::back_inserter(recv_msgs));
                     if (!ret) {
                         m_error(FRPC_ERROR_FORMAT("zmq::recv_multipart error!!!"));
