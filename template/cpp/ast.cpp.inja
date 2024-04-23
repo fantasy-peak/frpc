@@ -25,10 +25,12 @@
 #include <nlohmann/json.hpp>
 
 #ifdef __cpp_impl_coroutine
+#include <frpc_coroutine.h>
 #include <asio.hpp>
 #include <asio/experimental/concurrent_channel.hpp>
 
 {% include "asio_context_pool.inja" %}
+
 #endif
 
 {% include "utils.inja" %}

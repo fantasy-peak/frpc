@@ -26,7 +26,7 @@ auto create_bank_info() {
     return bank_info;
 }
 
-struct CoroHandler final : public frpc::CoroHelloWorldServerHandler {
+struct CoroHandler final : public frpc::AsioCoroHelloWorldServerHandler {
     virtual asio::awaitable<void> hello_world(frpc::BankInfo bank_info,
                                               std::string bank_name,
                                               uint64_t blance,

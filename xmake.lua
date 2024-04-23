@@ -9,7 +9,7 @@ add_requires("yaml-cpp", "nlohmann_json", "spdlog", "inja", "boost")
 set_languages("c++23")
 set_policy("check.auto_ignore_flags", false)
 add_cxflags("-O2 -Wall -Wextra -pedantic-errors -Wno-missing-field-initializers -Wno-ignored-qualifiers")
-add_includedirs("include", "out")
+add_includedirs("include")
 
 target("frpc")
     set_kind("binary")

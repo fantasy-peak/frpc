@@ -25,6 +25,7 @@
 #include <zmq_addon.hpp>
 
 #ifdef __cpp_impl_coroutine
+#include <frpc_coroutine.h>
 #include <asio.hpp>
 #include <asio/experimental/concurrent_channel.hpp>
 
@@ -69,6 +70,7 @@ private:
 };
 
 } // namespace frpc
+
 #endif
 
 namespace frpc {
@@ -916,6 +918,35 @@ public:
             token,
             std::move(bank_info), std::move(bank_name), blance, std::move(date), timeout);
     }
+
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date) {
+        return CallbackAwaiter<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>{
+            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date)](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+                this->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                                  [handle, set_resume_value = std::move(set_resume_value)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                                      set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
+                                      handle.resume();
+                                  });
+            }};
+    }
+
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const std::chrono::milliseconds& timeout) {
+        return CallbackAwaiter<std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>>{
+            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), &timeout](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+                this->hello_world(
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    [handle, set_resume_value](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                        set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
+                        handle.resume();
+                    },
+                    timeout,
+                    [handle, set_resume_value]() {
+                        set_resume_value(std::nullopt);
+                        handle.resume();
+                    });
+            }};
+    }
+
 #endif
 
     static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
@@ -992,7 +1023,7 @@ struct HelloWorldServerHandler {
     virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 };
 
-struct CoroHelloWorldServerHandler {
+struct AsioCoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #else
@@ -1000,10 +1031,20 @@ struct CoroHelloWorldServerHandler {
 #endif
 };
 
+struct FrpcCoroHelloWorldServerHandler {
+#ifdef __cpp_impl_coroutine
+    virtual frpc::Task<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+#else
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+#endif
+};
+
 class HelloWorldServer final {
 public:
+    using VariantHandler = std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>, std::shared_ptr<AsioCoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>>;
+
     HelloWorldServer(const ChannelConfig& config,
-                     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                     VariantHandler handler,
                      std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1018,7 +1059,7 @@ public:
     HelloWorldServer(const ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                     VariantHandler handler,
                      std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1032,7 +1073,7 @@ public:
     }
     HelloWorldServer(const ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
-                     std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                     VariantHandler handler,
                      std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1068,7 +1109,7 @@ public:
     }
 
     static auto create(ChannelConfig& config,
-                       std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
@@ -1077,14 +1118,14 @@ public:
     static auto create(ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         config.bind = true;
         return std::make_unique<HelloWorldServer>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
     }
     static auto create(ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
@@ -1113,12 +1154,21 @@ private:
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
                             arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
-                        } else {
+                        } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldServerHandler>>) {
 #ifdef __cpp_impl_coroutine
                             asio::co_spawn(
                                 m_pool_ptr->getIoContext(),
                                 arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out)),
                                 asio::detached);
+#else
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+#endif
+                        } else {
+#ifdef __cpp_impl_coroutine
+                            [](auto& arg, auto tp, auto out) mutable -> frpc::AsyncTask {
+                                auto& [bank_info, bank_name, blance, date] = tp;
+                                co_await arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                            }(arg, std::move(tp), std::move(out));
 #else
                             arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
 #endif
@@ -1139,7 +1189,7 @@ private:
         }
     }
 
-    std::variant<std::shared_ptr<CoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> m_handler;
+    std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>, std::shared_ptr<AsioCoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<BiChannel> m_channel;
     std::mutex m_mtx;
@@ -1189,23 +1239,31 @@ struct HelloWorldReceiverHandler {
     virtual void notice(int32_t in, std::string info) noexcept = 0;
 };
 
-struct CoroHelloWorldReceiverHandler {
+struct AsioCoroHelloWorldReceiverHandler {
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(std::string in) noexcept = 0;
-#else
-    virtual void hello_world(std::string in) noexcept = 0;
-#endif
-#ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> notice(int32_t in, std::string info) noexcept = 0;
 #else
+    virtual void hello_world(std::string in) noexcept = 0;
+    virtual void notice(int32_t in, std::string info) noexcept = 0;
+#endif
+};
+
+struct FrpcCoroHelloWorldReceiverHandler {
+#ifdef __cpp_impl_coroutine
+    virtual frpc::Task<void> hello_world(std::string in) noexcept = 0;
+    virtual frpc::Task<void> notice(int32_t in, std::string info) noexcept = 0;
+#else
+    virtual void hello_world(std::string in) noexcept = 0;
     virtual void notice(int32_t in, std::string info) noexcept = 0;
 #endif
 };
 
 class HelloWorldReceiver final {
 public:
+    using VariantHandler = std::variant<std::shared_ptr<FrpcCoroHelloWorldReceiverHandler>, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>>;
     HelloWorldReceiver(const ChannelConfig& config,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1220,7 +1278,7 @@ public:
     }
     HelloWorldReceiver(const ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1236,7 +1294,7 @@ public:
     HelloWorldReceiver(const ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error)
         : m_handler(std::move(handler))
         , m_error(error) {
@@ -1269,7 +1327,7 @@ public:
     }
 
     static auto create(ChannelConfig& config,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
@@ -1280,7 +1338,7 @@ public:
     static auto create(ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
@@ -1290,7 +1348,7 @@ public:
     }
     static auto create(ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
-                       std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> handler,
+                       VariantHandler handler,
                        std::function<void(std::string)> error) {
         if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
@@ -1320,12 +1378,21 @@ private:
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
                                 arg->hello_world(std::move(in));
-                            } else {
+                            } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>>) {
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
                                     arg->hello_world(std::move(in)),
                                     asio::detached);
+#else
+                                arg->hello_world(std::move(in));
+#endif
+                            } else {
+#ifdef __cpp_impl_coroutine
+                                [](auto& arg, auto tp) mutable -> frpc::AsyncTask {
+                                    auto& [in] = tp;
+                                    co_await arg->hello_world(std::move(in));
+                                }(arg, std::move(tp));
 #else
                                 arg->hello_world(std::move(in));
 #endif
@@ -1342,12 +1409,21 @@ private:
                             using T = std::decay_t<decltype(arg)>;
                             if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
                                 arg->notice(in, std::move(info));
-                            } else {
+                            } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>>) {
 #ifdef __cpp_impl_coroutine
                                 asio::co_spawn(
                                     m_pool_ptr->getIoContext(),
                                     arg->notice(in, std::move(info)),
                                     asio::detached);
+#else
+                                arg->notice(in, std::move(info));
+#endif
+                            } else {
+#ifdef __cpp_impl_coroutine
+                                [](auto& arg, auto tp) mutable -> frpc::AsyncTask {
+                                    auto& [in, info] = tp;
+                                    co_await arg->notice(in, std::move(info));
+                                }(arg, std::move(tp));
 #else
                                 arg->notice(in, std::move(info));
 #endif
@@ -1366,7 +1442,7 @@ private:
         }
     }
 
-    std::variant<std::shared_ptr<CoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>> m_handler;
+    VariantHandler m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<UniChannel> m_channel;
 #ifdef __cpp_impl_coroutine

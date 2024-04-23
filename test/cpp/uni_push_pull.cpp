@@ -12,7 +12,8 @@ void start(std::function<void()> func) {
 }
 
 #ifdef __cpp_impl_coroutine
-struct CoroHelloWorldReceiver final : public frpc::CoroHelloWorldReceiverHandler {
+#ifdef _ASIO_
+struct CoroHelloWorldReceiver final : public frpc::AsioCoroHelloWorldReceiverHandler {
     virtual asio::awaitable<void> hello_world(std::string in) noexcept override {
         spdlog::info("CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
@@ -22,6 +23,18 @@ struct CoroHelloWorldReceiver final : public frpc::CoroHelloWorldReceiverHandler
         co_return;
     }
 };
+#else
+struct CoroHelloWorldReceiver final : public frpc::FrpcCoroHelloWorldReceiverHandler {
+    virtual frpc::Task<void> hello_world(std::string in) noexcept override {
+        spdlog::info("Frpc CoroHelloWorldReceiver::hello_world: {}", in);
+        co_return;
+    }
+    virtual frpc::Task<void> notice(int32_t in, std::string info) noexcept override {
+        spdlog::info("Frpc CoroHelloWorldReceiver::notice: {}: {}", in, info);
+        co_return;
+    }
+};
+#endif
 #else
 struct HelloWorldReceiverHandler final : public frpc::HelloWorldReceiverHandler {
     HelloWorldReceiverHandler() = default;

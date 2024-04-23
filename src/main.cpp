@@ -391,20 +391,22 @@ int main(int argc, char** argv) {
     a.parse_check(argc, argv);
 
     auto filename = a.get<std::string>("filename");
-    auto injia_template = a.get<std::string>("template");
+    auto injia_template_dir = a.get<std::string>("template");
     auto output = a.get<std::string>("output");
     auto lang = a.get<std::string>("lang");
     auto web_template = a.get<std::string>("web_template");
     auto auto_sort = a.get<bool>("auto_sort");
 
     spdlog::info("filename: {}", filename);
-    if (injia_template.back() == '/')
-        injia_template.pop_back();
-    injia_template = std::format("{}/ast.cpp.inja", injia_template);
+    if (injia_template_dir.back() == '/')
+        injia_template_dir.pop_back();
+    auto injia_template = std::format("{}/ast.cpp.inja", injia_template_dir);
+    auto coro_template = std::format("{}/frpc_coroutine.h.inja", injia_template_dir);
     spdlog::info("template: {}", injia_template);
     spdlog::info("output: {}", output);
     spdlog::info("lang: {}", lang);
     spdlog::info("auto_sort: {}", auto_sort);
+    spdlog::info("coro template: {}", coro_template);
 
     nlohmann::json data = parseYaml(filename);
     if (auto_sort)
@@ -425,11 +427,16 @@ int main(int argc, char** argv) {
     env.add_callback("_format_move_or_not", 2, _format_move_or_not);
     env.add_callback("_random", 2, _random);
 
-    auto temp = env.parse_template(injia_template);
-    std::string result = env.render(temp, data);
-
     std::filesystem::create_directories(output);
-    auto f = std::format("{}/{}", output, data["node"].at("property").at("filename").get<std::string>());
+    // create common coroutine.h
+    auto temp = env.parse_template(coro_template);
+    std::string coroutine_result = env.render(temp, data);
+    auto f = std::format("{}/frpc_coroutine.h", output);
+    formatCode(f, coroutine_result);
+    // generate header file
+    temp = env.parse_template(injia_template);
+    auto result = env.render(temp, data);
+    f = std::format("{}/{}", output, data["node"].at("property").at("filename").get<std::string>());
     formatCode(f, result);
 
     if (web_template.empty())
@@ -438,6 +445,8 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(std::format("{}/bi_web/src/", output));
     std::filesystem::create_directories(std::format("{}/bi_web/include/", output));
     std::filesystem::create_directories(std::format("{}/bi_web/config/", output));
+    f = std::format("{}/bi_web/include/frpc_coroutine.h", output);
+    formatCode(f, coroutine_result);
     f = std::format("{}/bi_web/include/{}", output, data["node"].at("property").at("filename").get<std::string>());
     formatCode(f, result);
 

@@ -130,6 +130,35 @@ public:
             token,
             {{_format_args_name_and_move(func.inputs)}}, timeout);
     }
+
+    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}) {
+        return CallbackAwaiter<std::tuple<{{_format_args_type(func.outputs)}}>>{
+            [this, {{_format_catch_move(func.inputs)}}](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+                this->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}},
+                        [handle, set_resume_value = std::move(set_resume_value)]({{_format_args(func.outputs)}}) mutable {
+                            set_resume_value(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                            handle.resume();
+                        });
+            }};
+    }
+
+    auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, const std::chrono::milliseconds& timeout) {
+        return CallbackAwaiter<std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>>{
+            [this, {{_format_catch_move(func.inputs)}}, &timeout](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+                this->{{func.func_name}}(
+                        {{_format_args_name_and_move(func.inputs)}},
+                        [handle, set_resume_value]({{_format_args(func.outputs)}}) mutable {
+                            set_resume_value(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                            handle.resume();
+                        },
+                        timeout,
+                        [handle, set_resume_value]()  {
+                            set_resume_value(std::nullopt);
+                            handle.resume();
+                        });
+            }};
+    }
+
 #endif
 
     {% endfor %}
@@ -213,86 +242,101 @@ struct {{value.callee}}Handler {
     {% endfor %}
 };
 
-struct Coro{{value.callee}}Handler {
-    {% for func in value.definitions %}
+struct AsioCoro{{value.callee}}Handler {
 #ifdef __cpp_impl_coroutine
+    {% for func in value.definitions %}
         virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
-#else
-        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
-#endif
     {% endfor %}
+#else
+    {% for func in value.definitions %}
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
+    {% endfor %}
+#endif
 };
 
+struct FrpcCoro{{value.callee}}Handler {
+#ifdef __cpp_impl_coroutine
+    {% for func in value.definitions %}
+        virtual frpc::Task<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
+    {% endfor %}
+#else
+    {% for func in value.definitions %}
+        virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
+    {% endfor %}
+#endif
+};
 
 class {{value.callee}} final {
 public:
-        {{value.callee}}(const ChannelConfig& config,
-        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
-              std::function<void(std::string)> error) 
-              : m_handler(std::move(handler))
-              , m_error(error) {
+    using VariantHandler = std::variant<std::shared_ptr<FrpcCoro{{value.callee}}Handler>, std::shared_ptr<AsioCoro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>>;
+
+    {{value.callee}}(const ChannelConfig& config,
+        VariantHandler handler,
+            std::function<void(std::string)> error)
+            : m_handler(std::move(handler))
+            , m_error(error) {
 #ifdef __cpp_impl_coroutine
-                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
-                m_pool_ptr->start();
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
 #endif
-                m_channel = std::make_unique<BiChannel>(config, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
-                    dispatch(recv_bufs);
-                });
+            m_channel = std::make_unique<BiChannel>(config, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
         }
-        {{value.callee}}(const ChannelConfig& config,
-            const std::shared_ptr<zmq::context_t>& context_ptr,
-            const std::shared_ptr<zmq::socket_t>& socket_ptr,
-            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
-            std::function<void(std::string)> error) 
-              : m_handler(std::move(handler))
-              , m_error(error) {
+    {{value.callee}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        VariantHandler handler,
+        std::function<void(std::string)> error)
+            : m_handler(std::move(handler))
+            , m_error(error) {
 #ifdef __cpp_impl_coroutine
-                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
-                m_pool_ptr->start();
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
 #endif
-                m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
-                    dispatch(recv_bufs);
-                });
-        }
-        {{value.callee}}(const ChannelConfig& config,
-            const std::shared_ptr<zmq::context_t>& context_ptr,
-            std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
-              std::function<void(std::string)> error) 
-              : m_handler(std::move(handler))
-              , m_error(error) {
+            m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
+    }
+    {{value.callee}}(const ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        VariantHandler handler,
+            std::function<void(std::string)> error)
+            : m_handler(std::move(handler))
+            , m_error(error) {
 #ifdef __cpp_impl_coroutine
-                m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
-                m_pool_ptr->start();
+            m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+            m_pool_ptr->start();
 #endif
-                m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
-                    dispatch(recv_bufs);
-                });
-        }
-        ~{{value.callee}}() {
+            m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this] (std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
+    }
+    ~{{value.callee}}() {
 #ifdef __cpp_impl_coroutine
-            if (m_pool_ptr)
-                m_pool_ptr->stop();
+        if (m_pool_ptr)
+            m_pool_ptr->stop();
 #endif
-        }
+    }
 
-        auto& socket() {
-            return m_channel->socket();
-        }
+    auto& socket() {
+        return m_channel->socket();
+    }
 
-        auto& context() {
-            return m_channel->context();
-        }
+    auto& context() {
+        return m_channel->context();
+    }
 
-        bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
-            return m_channel->monitor(std::move(cb), events);
-        }
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+        return m_channel->monitor(std::move(cb), events);
+    }
 
-        void start() {
-            m_channel->start();
-        }
+    void start() {
+        m_channel->start();
+    }
 
-    static auto create(ChannelConfig& config, 
-        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+    static auto create(ChannelConfig& config,
+        VariantHandler handler,
         std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
@@ -301,14 +345,14 @@ public:
     static auto create(ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
-        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        VariantHandler handler,
         std::function<void(std::string)> error) {
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
     }
     static auto create(ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
-        std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
+        VariantHandler handler,
         std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
@@ -338,12 +382,21 @@ private:
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<{{value.callee}}Handler>>) {
                             arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
-                        } else {
+                        } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoro{{value.callee}}Handler>>) {
 #ifdef __cpp_impl_coroutine
                             asio::co_spawn(
                                 m_pool_ptr->getIoContext(),
                                 arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out)),
                                 asio::detached);
+#else
+                            arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+#endif
+                        } else {
+#ifdef __cpp_impl_coroutine
+                            [](auto& arg, auto tp, auto out) mutable -> frpc::AsyncTask {
+                                auto& [{{_format_args_name(func.inputs)}}] = tp;
+                                co_await arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
+                            }(arg, std::move(tp), std::move(out));
 #else
                             arg->{{func.func_name}}({{_format_args_name_and_move(func.inputs)}}, std::move(out));
 #endif
@@ -365,7 +418,7 @@ private:
         }
     }
 
-    std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
+    std::variant<std::shared_ptr<FrpcCoro{{value.callee}}Handler>, std::shared_ptr<AsioCoro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<BiChannel> m_channel;
     std::mutex m_mtx;
