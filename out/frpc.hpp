@@ -1143,8 +1143,13 @@ private:
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
                     auto tp = unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(recv_bufs[2].data(), recv_bufs[2].size());
-                    std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs)), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
-                        auto& snd_bufs = *ptr;
+                    auto recv_bufs_ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
+                    // Don't call it in multiple threads
+                    std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [done = false, recv_bufs_ptr = std::move(recv_bufs_ptr), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                        if (done)
+                            return;
+                        done = true;
+                        auto& snd_bufs = *recv_bufs_ptr;
                         auto packet = pack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                         snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
                         m_channel->send(std::move(snd_bufs));
