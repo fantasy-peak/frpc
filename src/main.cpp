@@ -92,6 +92,8 @@ static std::unordered_map<std::string, std::string> CPP_TYPE_TABLE{
     {"double", "double"},
 };
 
+static std::unordered_map<std::string, std::string> ENUM_NAME_TABLE;
+
 auto _format_args_to_const_ref(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
         if (CPP_TYPE_TABLE.contains(type))
@@ -117,7 +119,7 @@ auto _format_args_type(inja::Arguments& args) {
 
 auto _format_args_name_and_move(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
             return name;
         return std::format("std::move({})", name);
     };
@@ -132,7 +134,7 @@ auto _format_args_name_and_move(inja::Arguments& args) {
 
 auto _format_catch_move(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
             return name;
         return std::format("{} = std::move({})", name, name);
     };
@@ -156,7 +158,7 @@ auto _format_args_name(inja::Arguments& args) {
 
 auto _format_move_or_not(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
             return name;
         return std::format("std::move({})", name);
     };
@@ -315,6 +317,7 @@ auto parseYaml(const std::string& file) {
     for (const auto& kv : config) {
         nlohmann::json data;
         auto node_name = kv.first.as<std::string>();
+        boost::trim(node_name);
         if ("property" == node_name) {
             namespace_str = kv.second["namespace"].as<std::string>();
             filename = kv.second["filename"].as<std::string>();
@@ -340,6 +343,7 @@ auto parseYaml(const std::string& file) {
             data["definitions"] = std::move(definitions_json);
         }
         if (type == "enum") {
+            ENUM_NAME_TABLE.emplace(node_name, node_name);
             data["enum_name"] = node_name;
             data["value_type"] = toCppType(config[node_name]["value_type"].as<std::string>());
             nlohmann::json definitions_json;
