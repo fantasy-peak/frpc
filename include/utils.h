@@ -18,22 +18,22 @@ inline auto extract(const std::string& input) {
     return extracted_string;
 }
 
-inline auto toSnakeCase(const std::string& s) {
-    std::regex words_regex("[A-Z][a-z]+");
-    auto words_begin = std::sregex_iterator(s.begin(), s.end(), words_regex);
-    auto words_end = std::sregex_iterator();
-    std::string name{};
-    for (std::sregex_iterator i = words_begin; i != words_end; ++i) {
-        std::smatch match = *i;
-        std::string match_str = match.str();
-        std::transform(match_str.begin(), match_str.end(), match_str.begin(), ::tolower);
-        auto z = i;
-        if (++z == words_end)
-            name += match_str;
-        else
-            name += (match_str + "_");
+inline auto toSnakeCase(const std::string& input) {
+    std::string snake_case;
+    bool last_was_upper = false;
+    for (char c : input) {
+        if (std::isupper(c)) {
+            if (!snake_case.empty() && !last_was_upper) {
+                snake_case.push_back('_');
+            }
+            snake_case.push_back(std::tolower(c));
+            last_was_upper = true;
+        } else {
+            snake_case.push_back(c);
+            last_was_upper = false;
+        }
     }
-    return name;
+    return snake_case;
 }
 
 namespace detail {

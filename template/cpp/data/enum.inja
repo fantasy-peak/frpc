@@ -1,4 +1,4 @@
-namespace {{node.property.namespace}} {
+namespace {{value.property.namespace}} {
 
 enum class {{value.enum_name}} : {{value.value_type}} {
     {% for field in value.definitions %}
@@ -32,6 +32,6 @@ inline {{value.enum_name}} fromString<{{value.enum_name}}>(const std::string& va
     throw std::bad_cast();
 }
 
-} // {{node.property.namespace}}
+} // {{value.property.namespace}}
 
-MSGPACK_ADD_ENUM({{node.property.namespace}}::{{value.enum_name}})
+MSGPACK_ADD_ENUM({{value.property.namespace}}::{{value.enum_name}})

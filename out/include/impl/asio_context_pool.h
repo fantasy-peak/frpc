@@ -1,4 +1,10 @@
-namespace {{node.property.namespace}} {
+#ifndef _FRPC_CONTEXT_POOL_H_
+#define _FRPC_CONTEXT_POOL_H_
+
+#include <asio.hpp>
+#include <asio/experimental/concurrent_channel.hpp>
+
+namespace frpc {
 
 class ContextPool final {
 public:
@@ -16,7 +22,9 @@ public:
 
     void start() {
         for (auto& context : m_io_contexts)
-            m_threads.emplace_back(std::jthread([&] { context->run(); }));
+            m_threads.emplace_back(std::jthread([&] {
+                context->run();
+            }));
     }
 
     void stop() {
@@ -36,4 +44,6 @@ private:
     std::vector<std::jthread> m_threads;
 };
 
-} // {{node.property.namespace}}
+} // namespace frpc
+
+#endif // _FRPC_CONTEXT_POOL_H_

@@ -1,6 +1,6 @@
 property:
-  filename: frpc.hpp
-  namespace: frpc
+  filename: fantasy.hpp
+  namespace: fantasy
 
 TestType:
   type: enum

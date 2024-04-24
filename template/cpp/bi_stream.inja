@@ -17,37 +17,37 @@ namespace {{node.property.namespace}} {
 
 class {{value.caller}} final {
 public:
-    {{value.caller}}(const ChannelConfig& config,
+    {{value.caller}}(const frpc::ChannelConfig& config,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<BiChannel>(config, error, [this](auto& recv_msgs) mutable {
+        ,m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
-    {{value.caller}}(const ChannelConfig& config,
+    {{value.caller}}(const frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
+        ,m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
-    {{value.caller}}(const ChannelConfig& config,
+    {{value.caller}}(const frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
+        ,m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
     ~{{value.caller}}() {
@@ -73,12 +73,12 @@ public:
         auto req_id = m_req_id.fetch_add(1);
         auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
 
-        auto buffer = pack<decltype(header)>(header);
+        auto buffer = frpc::pack<decltype(header)>(header);
         std::string header_str((char*)buffer.data(), buffer.size());
 
-        auto stream_ptr = std::make_shared<Stream<void({{_format_args_type(func.inputs)}})>>(
+        auto stream_ptr = std::make_shared<frpc::Stream<void({{_format_args_type(func.inputs)}})>>(
             [this, header_str = std::move(header_str)] ({{_format_args(func.inputs)}}) mutable {
-                auto packet = pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
+                auto packet = frpc::pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
                 std::vector<zmq::message_t> snd_bufs;
                 snd_bufs.emplace_back(zmq::message_t(header_str.data(), header_str.size()));
                 snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
@@ -103,17 +103,17 @@ public:
 
     {% endfor %}
 
-    static auto create(ChannelConfig& config, std::function<void(std::string)> error) {
+    static auto create(frpc::ChannelConfig& config, std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<{{value.caller}}>(config, std::move(error));
     }
-    static auto create(ChannelConfig& config,
+    static auto create(frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
         std::function<void(std::string)> error) {
         return std::make_unique<{{value.caller}}>(config, context_ptr, socket_ptr, std::move(error));
     }
-    static auto create(ChannelConfig& config,
+    static auto create(frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
@@ -131,7 +131,7 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type, is_close] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>>(recv_bufs[0].data(), recv_bufs[0].size());
+            auto [req_id, req_type, is_close] = frpc::unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>>(recv_bufs[0].data(), recv_bufs[0].size());
             if (is_close) {
                 std::unique_lock lk(m_mtx);
                 m_cb.erase(req_id);
@@ -142,7 +142,7 @@ private:
             switch (req_type) {
                 {% for func in value.definitions %}
                     case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
-                        auto [{{_format_args_name(func.outputs)}}] = unpack<std::tuple<{{_format_args_type(func.outputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+                        auto [{{_format_args_name(func.outputs)}}] = frpc::unpack<std::tuple<{{_format_args_type(func.outputs)}}>>(recv_bufs[1].data(), recv_bufs[1].size());
                         std::unique_lock lk(m_mtx);
                         if (m_cb.find(req_id) == m_cb.end())
                             break;
@@ -165,20 +165,20 @@ private:
         }
     }
 
-    ChannelConfig m_config;
-    std::unique_ptr<BiChannel> m_channel;
+    frpc::ChannelConfig m_config;
+    std::unique_ptr<frpc::BiChannel> m_channel;
     std::function<void(std::string)> m_error;
     std::mutex m_mtx;
     std::unordered_map<uint64_t, std::any> m_cb;
     std::unordered_map<uint64_t, std::function<void()>> m_close_cb;
     std::atomic_uint64_t m_req_id{0};
-    std::unique_ptr<ContextPool> m_pool_ptr;
+    std::unique_ptr<frpc::ContextPool> m_pool_ptr;
 };
 
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
     virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
+        std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
     {% endfor %}
 };
 
@@ -186,27 +186,27 @@ struct Coro{{value.callee}}Handler {
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
+        std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #else
     virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
-        std::shared_ptr<Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
+        std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #endif
     {% endfor %}
 };
 
 class {{value.callee}} final {
 public:
-    {{value.callee}}(const ChannelConfig& config,
+    {{value.callee}}(const frpc::ChannelConfig& config,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
         std::function<void(std::string)> error)
         : m_config(config)
         , m_handler(std::move(handler))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<BiChannel>(config, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+        m_channel = std::make_unique<frpc::BiChannel>(config, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
     }
-    {{value.callee}}(const ChannelConfig& config,
+    {{value.callee}}(const frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
@@ -214,20 +214,20 @@ public:
         : m_config(config)
         , m_handler(std::move(handler))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<BiChannel>(config, context_ptr, socket_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
     }
-    {{value.callee}}(const ChannelConfig& config,
+    {{value.callee}}(const frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
         std::function<void(std::string)> error)
         : m_config(config)
         , m_handler(std::move(handler))
         , m_error(error) {
-        m_pool_ptr = std::make_unique<ContextPool>(config.context_pool_size);
+        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<BiChannel>(config, context_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
+        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this] (auto& recv_bufs) { dispatch(recv_bufs); });
     }
     ~{{value.callee}}() {
         if (m_pool_ptr)
@@ -246,14 +246,14 @@ public:
         m_channel->start();
     }
 
-    static auto create(ChannelConfig& config,
+    static auto create(frpc::ChannelConfig& config,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
         std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, std::move(handler), std::move(error));
     }
-    static auto create(ChannelConfig& config,
+    static auto create(frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
@@ -262,7 +262,7 @@ public:
         config.bind = true;
         return std::make_unique<{{value.callee}}>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
     }
-    static auto create(ChannelConfig& config,
+    static auto create(frpc::ChannelConfig& config,
         const std::shared_ptr<zmq::context_t>& context_ptr,
         std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> handler,
         std::function<void(std::string)> error) {
@@ -282,11 +282,11 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type] = unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+            auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
             switch(req_type) {
             {% for func in value.definitions %}
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
-                    auto tp = unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    auto tp = frpc::unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
                     auto& [{{_format_args_name(func.inputs)}}] = tp;
                     std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>> channel_ptr;
                     {
@@ -306,20 +306,20 @@ private:
                         m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
 
                     auto is_open = std::make_tuple(req_id, req_type, false);
-                    auto is_open_buffer = pack<decltype(is_open)>(is_open);
+                    auto is_open_buffer = frpc::pack<decltype(is_open)>(is_open);
                     auto is_close = std::make_tuple(req_id, req_type, true);
-                    auto is_close_buffer = pack<decltype(is_close)>(is_close);
+                    auto is_close_buffer = frpc::pack<decltype(is_close)>(is_close);
                     // set open stream flag
                     recv_bufs[1] = zmq::message_t(is_open_buffer.data(), is_open_buffer.size());
                     // set close stream flag
                     recv_bufs[2] = zmq::message_t(is_close_buffer.data(), is_close_buffer.size());
                     auto ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
 
-                    auto out = std::make_shared<Stream<void({{_format_args_type(func.outputs)}})>>(
+                    auto out = std::make_shared<frpc::Stream<void({{_format_args_type(func.outputs)}})>>(
                         [ptr, this] ({{_format_args(func.outputs)}}) mutable {
                             auto& recv_bufs = *ptr;
-                            auto packet = pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
-                            auto close = pack<bool>(false);
+                            auto packet = frpc::pack<std::tuple<{{_format_args_type(func.outputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.outputs)}}));
+                            auto close = frpc::pack<bool>(false);
                             std::vector<zmq::message_t> snd_bufs;
                             snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
                             snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
@@ -366,12 +366,12 @@ private:
         }
     }
 
-    ChannelConfig m_config;
+    frpc::ChannelConfig m_config;
     std::variant<std::shared_ptr<Coro{{value.callee}}Handler>, std::shared_ptr<{{value.callee}}Handler>> m_handler;
     std::function<void(std::string)> m_error;
-    std::unique_ptr<BiChannel> m_channel;
+    std::unique_ptr<frpc::BiChannel> m_channel;
     std::mutex m_mtx;
-    std::unique_ptr<ContextPool> m_pool_ptr;
+    std::unique_ptr<frpc::ContextPool> m_pool_ptr;
     std::unordered_map<uint64_t, std::any> m_channel_mapping;
 }; 
 

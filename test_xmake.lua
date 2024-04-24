@@ -9,7 +9,7 @@ add_requires("cppzmq", {system = false})
 
 set_policy("check.auto_ignore_flags", false)
 add_cxflags("-O2 -Wall -Wextra -pedantic-errors -Wno-missing-field-initializers -Wno-ignored-qualifiers")
-add_includedirs("./out")
+add_includedirs("./out/include")
 
 target("bi")
     set_languages("c++17")

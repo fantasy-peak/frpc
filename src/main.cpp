@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <random>
 #include <unordered_map>
@@ -14,6 +15,20 @@
 
 #include "cmdline.h"
 #include "utils.h"
+
+void copy_directory(const std::filesystem::path& source, const std::filesystem::path& destination) {
+    if (!std::filesystem::exists(destination)) {
+        std::filesystem::create_directories(destination);
+    }
+    for (const auto& entry : std::filesystem::directory_iterator(source)) {
+        const auto destination_entry = destination / entry.path().filename();
+        if (std::filesystem::is_directory(entry.status())) {
+            copy_directory(entry, destination_entry);
+        } else {
+            std::filesystem::copy_file(entry, destination_entry, std::filesystem::copy_options::overwrite_existing);
+        }
+    }
+}
 
 std::string toCppType(std::string type) {
     auto convert = [](const auto& type) {
@@ -222,20 +237,9 @@ auto sort(nlohmann::json json) {
         {"double", "double"},
         {"std::string", "std::string"},
     };
-    nlohmann::json enum_json, struct_json, interface_json;
-    for (auto& j : json) {
-        auto type = j["type"].get<std::string>();
-        if (type == "enum") {
-            enum_json.emplace_back(std::move(j));
-        } else if (type == "struct") {
-            struct_json.emplace_back(std::move(j));
-        } else if (type == "interface") {
-            interface_json.emplace_back(std::move(j));
-        } else {
-            spdlog::error("Unexpected type");
-            exit(1);
-        }
-    }
+    auto& enum_json = json["enum"];
+    auto& struct_json = json["struct"];
+    // auto interface_json = json["interface"];
 
     auto check = [&](const std::string& type) {
         if (base_type.contains(type))
@@ -294,6 +298,7 @@ auto sort(nlohmann::json json) {
     }
     std::vector<Graph::vertex_descriptor> sorted_vertices;
     boost::topological_sort(g, std::back_inserter(sorted_vertices));
+    struct_json.clear();
     for (auto it = sorted_vertices.begin(); it != sorted_vertices.end(); ++it) {
         auto it1 = std::ranges::find_if(vertex_map, [&](auto& p) {
             auto& [k, v] = p;
@@ -301,13 +306,10 @@ auto sort(nlohmann::json json) {
         });
         if (it1 != vertex_map.end()) {
             spdlog::info("{}", it1->first);
-            enum_json.emplace_back(std::move(struct_json_map[it1->first]));
+            struct_json.emplace_back(std::move(struct_json_map[it1->first]));
         }
     }
-    for (auto& j : interface_json) {
-        enum_json.emplace_back(std::move(j));
-    }
-    return enum_json;
+    return json;
 }
 
 auto parseYaml(const std::string& file) {
@@ -381,42 +383,29 @@ auto parseYaml(const std::string& file) {
         }
         ast["node"]["value"].emplace_back(std::move(data));
     }
+    std::vector<nlohmann::json> enum_json, struct_json, interface_json;
+    for (auto& j : ast["node"]["value"]) {
+        auto type = j["type"].get<std::string>();
+        if (type == "enum") {
+            enum_json.emplace_back(std::move(j));
+        } else if (type == "struct") {
+            struct_json.emplace_back(std::move(j));
+        } else if (type == "interface") {
+            interface_json.emplace_back(std::move(j));
+        } else {
+            spdlog::error("Unexpected type");
+            exit(1);
+        }
+    }
+    nlohmann::json j;
+    j["enum"] = enum_json;
+    j["struct"] = struct_json;
+    j["interface"] = interface_json;
+    ast["node"]["value"] = std::move(j);
     return ast;
 }
 
-int main(int argc, char** argv) {
-    cmdline::parser a;
-    a.add<std::string>("filename", 'f', "input yaml yaml file", true, "");
-    a.add<std::string>("template", 't', "template directory", true, "");
-    a.add<std::string>("output", 'o', "output directory", true, "");
-    a.add<std::string>("lang", 'l', "language", false, "cpp");
-    a.add<std::string>("web_template", 'w', "web template directory", false, "");
-    a.add<bool>("auto_sort", 's', "automatically sort structural dependencies", false, false);
-    a.parse_check(argc, argv);
-
-    auto filename = a.get<std::string>("filename");
-    auto injia_template_dir = a.get<std::string>("template");
-    auto output = a.get<std::string>("output");
-    auto lang = a.get<std::string>("lang");
-    auto web_template = a.get<std::string>("web_template");
-    auto auto_sort = a.get<bool>("auto_sort");
-
-    spdlog::info("filename: {}", filename);
-    if (injia_template_dir.back() == '/')
-        injia_template_dir.pop_back();
-    auto injia_template = std::format("{}/ast.cpp.inja", injia_template_dir);
-    auto coro_template = std::format("{}/frpc_coroutine.h.inja", injia_template_dir);
-    spdlog::info("template: {}", injia_template);
-    spdlog::info("output: {}", output);
-    spdlog::info("lang: {}", lang);
-    spdlog::info("auto_sort: {}", auto_sort);
-    spdlog::info("coro template: {}", coro_template);
-
-    nlohmann::json data = parseYaml(filename);
-    if (auto_sort)
-        data["node"]["value"] = sort(std::move(data["node"]["value"]));
-    // spdlog::info("{}", data.dump(4));
-
+inja::Environment initEnv() {
     inja::Environment env;
     env.set_trim_blocks(true);
     env.set_lstrip_blocks(true);
@@ -430,35 +419,98 @@ int main(int argc, char** argv) {
     env.add_callback("_format_catch_move", 1, _format_catch_move);
     env.add_callback("_format_move_or_not", 2, _format_move_or_not);
     env.add_callback("_random", 2, _random);
+    return env;
+}
 
-    std::filesystem::create_directories(output);
-    // create common coroutine.h
-    auto temp = env.parse_template(coro_template);
-    std::string coroutine_result = env.render(temp, data);
-    auto f = std::format("{}/frpc_coroutine.h", output);
-    formatCode(f, coroutine_result);
+int main(int argc, char** argv) {
+    cmdline::parser a;
+    a.add<std::string>("filename", 'f', "input yaml yaml file", true, "");
+    a.add<std::string>("template", 't', "template directory", true, "");
+    a.add<std::string>("output", 'o', "output directory", true, "");
+    a.add<std::string>("lang", 'l', "language", false, "cpp");
+    a.add<std::string>("web_template", 'w', "web template directory", false, "");
+    a.add<bool>("auto_sort", 's', "automatically sort structural dependencies", false, false);
+    a.parse_check(argc, argv);
+
+    auto filename = a.get<std::string>("filename");
+    auto inja_template_dir = a.get<std::string>("template");
+    auto output = a.get<std::string>("output");
+    auto lang = a.get<std::string>("lang");
+    auto web_template = a.get<std::string>("web_template");
+    auto auto_sort = a.get<bool>("auto_sort");
+
+    spdlog::info("filename: {}", filename);
+    if (inja_template_dir.back() == '/')
+        inja_template_dir.pop_back();
+    auto inja_template = std::format("{}/ast.cpp.inja", inja_template_dir);
+    auto coro_template = std::format("{}/impl_coroutine.h.inja", inja_template_dir);
+    spdlog::info("template: {}", inja_template);
+    spdlog::info("output: {}", output);
+    spdlog::info("lang: {}", lang);
+    spdlog::info("auto_sort: {}", auto_sort);
+    spdlog::info("coro template: {}", coro_template);
+
+    inja::Environment env = initEnv();
+
+    nlohmann::json data = parseYaml(filename);
+    if (auto_sort)
+        data["node"]["value"] = sort(std::move(data["node"]["value"]));
+    spdlog::info("{}", data.dump(4));
+
+    std::filesystem::create_directories(std::format("{}/include", output));
+    std::filesystem::create_directories(std::format("{}/include/impl", output));
+    std::filesystem::create_directories(std::format("{}/include/data", output));
+    // create impl coroutine.h
+    auto create_file = [&env](const auto& temp, const auto& filename, auto& ast_json) {
+        auto inja_template = env.parse_template(temp);
+        std::string result = env.render(inja_template, ast_json);
+        formatCode(filename, result);
+    };
+    create_file(std::format("{}/impl/coroutine.h.inja", inja_template_dir),
+                std::format("{}/include/impl/coroutine.h", output), data);
+    create_file(std::format("{}/impl/bi_channel.inja", inja_template_dir),
+                std::format("{}/include/impl/bi_channel.h", output), data);
+    create_file(std::format("{}/impl/uni_channel.inja", inja_template_dir),
+                std::format("{}/include/impl/uni_channel.h", output), data);
+    create_file(std::format("{}/impl/utils.inja", inja_template_dir),
+                std::format("{}/include/impl/utils.h", output), data);
+    create_file(std::format("{}/impl/monitor.inja", inja_template_dir),
+                std::format("{}/include/impl/monitor.h", output), data);
+    create_file(std::format("{}/impl/asio_context_pool.inja", inja_template_dir),
+                std::format("{}/include/impl/asio_context_pool.h", output), data);
+    create_file(std::format("{}/impl/to_string.inja", inja_template_dir),
+                std::format("{}/include/impl/to_string.h", output), data);
+    for (auto& enum_json : data["node"]["value"]["enum"]) {
+        nlohmann::json ast;
+        auto enum_file_name = toSnakeCase(enum_json["enum_name"].get<std::string>());
+        ast["value"] = enum_json;
+        create_file(std::format("{}/data/enum.inja", inja_template_dir),
+                    std::format("{}/include/data/{}.h", output, enum_file_name), ast);
+    }
+    for (auto& struct_json : data["node"]["value"]["struct"]) {
+        nlohmann::json ast;
+        auto struct_file_name = toSnakeCase(struct_json["struct_name"].get<std::string>());
+        ast["value"] = struct_json;
+        create_file(std::format("{}/data/struct.inja", inja_template_dir),
+                    std::format("{}/include/data/{}.h", output, struct_file_name), ast);
+    }
     // generate header file
-    temp = env.parse_template(injia_template);
+    auto temp = env.parse_template(inja_template);
     auto result = env.render(temp, data);
-    f = std::format("{}/{}", output, data["node"].at("property").at("filename").get<std::string>());
+    auto f = std::format("{}/include/{}", output, data["node"].at("property").at("filename").get<std::string>());
     formatCode(f, result);
 
     if (web_template.empty())
         return 0;
-    // generate bi web service
+
+    // // generate bi web service
     std::filesystem::create_directories(std::format("{}/bi_web/src/", output));
     std::filesystem::create_directories(std::format("{}/bi_web/include/", output));
     std::filesystem::create_directories(std::format("{}/bi_web/config/", output));
-    f = std::format("{}/bi_web/include/frpc_coroutine.h", output);
-    formatCode(f, coroutine_result);
-    f = std::format("{}/bi_web/include/{}", output, data["node"].at("property").at("filename").get<std::string>());
-    formatCode(f, result);
+    copy_directory(std::format("{}/include", output), std::format("{}/bi_web/include/", output));
 
-    auto bi_temp = env.parse_template(std::format("{}/bi/src/main.cpp.inja", web_template));
-    result = env.render(bi_temp, data);
-    formatCode(std::format("{}/bi_web/src/main.cpp", output), result);
-
-    bi_temp = env.parse_template(std::format("{}/bi/xmake.lua.inja", web_template));
+    create_file(std::format("{}/bi/src/main.cpp.inja", web_template), std::format("{}/bi_web/src/main.cpp", output), data);
+    auto bi_temp = env.parse_template(std::format("{}/bi/xmake.lua.inja", web_template));
     env.write(bi_temp, data, std::format("{}/bi_web/xmake.lua", output));
 
     bi_temp = env.parse_template(std::format("{}/bi/config/config.example.json.inja", web_template));

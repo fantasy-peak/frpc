@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _FRPC_COROUTINE_H_
+#define _FRPC_COROUTINE_H_
 
 #include <algorithm>
 #include <atomic>
@@ -374,3 +375,5 @@ private:
 };
 
 } // namespace frpc
+
+#endif // _FRPC_COROUTINE_H_

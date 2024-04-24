@@ -3,7 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "frpc.hpp"
+#include "fantasy.hpp"
 
 inline std::string addr{"tcp://127.0.0.1:5878"};
 
@@ -13,7 +13,7 @@ void start(std::function<void()> func) {
 
 #ifdef __cpp_impl_coroutine
 #ifdef _ASIO_
-struct CoroHelloWorldReceiver final : public frpc::AsioCoroHelloWorldReceiverHandler {
+struct CoroHelloWorldReceiver final : public fantasy::AsioCoroHelloWorldReceiverHandler {
     virtual asio::awaitable<void> hello_world(std::string in) noexcept override {
         spdlog::info("CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
@@ -24,7 +24,7 @@ struct CoroHelloWorldReceiver final : public frpc::AsioCoroHelloWorldReceiverHan
     }
 };
 #else
-struct CoroHelloWorldReceiver final : public frpc::FrpcCoroHelloWorldReceiverHandler {
+struct CoroHelloWorldReceiver final : public fantasy::FrpcCoroHelloWorldReceiverHandler {
     virtual frpc::Task<void> hello_world(std::string in) noexcept override {
         spdlog::info("Frpc CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
@@ -36,7 +36,7 @@ struct CoroHelloWorldReceiver final : public frpc::FrpcCoroHelloWorldReceiverHan
 };
 #endif
 #else
-struct HelloWorldReceiverHandler final : public frpc::HelloWorldReceiverHandler {
+struct HelloWorldReceiverHandler final : public fantasy::HelloWorldReceiverHandler {
     HelloWorldReceiverHandler() = default;
     HelloWorldReceiverHandler(const std::string& label)
         : label(label) {
@@ -60,7 +60,7 @@ void start_push() {
     pub_config.socktype = zmq::socket_type::push;
     pub_config.bind = true;
     pub_config.addr = addr;
-    auto sender = frpc::HelloWorldSender::create(pub_config);
+    auto sender = fantasy::HelloWorldSender::create(pub_config);
     int i = 10;
     while (i--) {
         sender->hello_world(std::to_string(i) + "_frpc_push_01");
@@ -77,7 +77,7 @@ int main() {
     sub_config.socktype = zmq::socket_type::pull;
     sub_config.bind = false;
 
-    auto receiver = frpc::HelloWorldReceiver::create(
+    auto receiver = fantasy::HelloWorldReceiver::create(
         sub_config,
 #ifdef __cpp_impl_coroutine
         std::make_shared<CoroHelloWorldReceiver>(),
@@ -89,7 +89,7 @@ int main() {
         });
     receiver->start();
 
-    auto receiver1 = frpc::HelloWorldReceiver::create(
+    auto receiver1 = fantasy::HelloWorldReceiver::create(
         sub_config,
 #ifdef __cpp_impl_coroutine
         std::make_shared<CoroHelloWorldReceiver>(),

@@ -1,5 +1,7 @@
+#ifndef _{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_
+#define _{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_
 
-namespace {{node.property.namespace}} {
+namespace {{value.property.namespace}} {
 
 struct {{value.struct_name}} {
 	{% for field in value.definitions %}
@@ -21,4 +23,6 @@ inline std::string toString(const {{value.struct_name}}& value) {
 	return str;
 }
 
-} // {{node.property.namespace}}
+} // {{value.property.namespace}}
+
+#endif //_{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _FRPC_COROUTINE_H_
+#define _FRPC_COROUTINE_H_
 
 #include <algorithm>
 #include <atomic>
@@ -344,29 +345,21 @@ std::function<void()> async_func(Coro&& coro) {
 }
 
 template <typename T>
-    requires(!std::is_reference<T>::value)
-struct CallbackAwaiter {
+requires(!std::is_reference<T>::value) struct CallbackAwaiter {
 public:
     using CallbackFunction =
         std::function<void(std::coroutine_handle<>, std::function<void(T)>)>;
 
     CallbackAwaiter(CallbackFunction callback_function)
-        : callback_function_(std::move(callback_function)) {
-    }
+        : callback_function_(std::move(callback_function)) {}
 
-    bool await_ready() noexcept {
-        return false;
-    }
+    bool await_ready() noexcept { return false; }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        callback_function_(handle, [this](T t) {
-            result_ = std::move(t);
-        });
+        callback_function_(handle, [this](T t) { result_ = std::move(t); });
     }
 
-    T await_resume() noexcept {
-        return std::move(result_);
-    }
+    T await_resume() noexcept { return std::move(result_); }
 
 private:
     CallbackFunction callback_function_;
@@ -374,3 +367,5 @@ private:
 };
 
 } // namespace frpc
+
+#endif // _FRPC_COROUTINE_H_

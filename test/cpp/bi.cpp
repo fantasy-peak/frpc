@@ -3,7 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "frpc.hpp"
+#include "fantasy.hpp"
 
 inline std::string addr{"tcp://127.0.0.1:5878"};
 
@@ -12,12 +12,12 @@ void start(std::function<void()> func) {
 }
 
 auto create_bank_info() {
-    frpc::BankInfo bank_info;
+    fantasy::BankInfo bank_info;
     bank_info.name = "xiaoli";
-    bank_info.type = frpc::TestType::EnumOne;
+    bank_info.type = fantasy::TestType::EnumOne;
     bank_info.test_one = 100;
     bank_info.test_two = 101;
-    bank_info.test_map_one.emplace("frpc", frpc::TestType::EnumOne);
+    bank_info.test_map_one.emplace("fantasy", fantasy::TestType::EnumOne);
     bank_info.test_map.emplace(false, 555);
     bank_info.test_vector.emplace_back("vector");
     bank_info.info.name = "rpc";
@@ -25,15 +25,15 @@ auto create_bank_info() {
     return bank_info;
 }
 
-struct Handler final : public frpc::HelloWorldServerHandler {
-    virtual void hello_world(frpc::BankInfo bank_info,
+struct Handler final : public fantasy::HelloWorldServerHandler {
+    virtual void hello_world(fantasy::BankInfo bank_info,
                              std::string bank_name,
                              uint64_t blance,
                              std::optional<std::string> date,
-                             std::function<void(std::string, frpc::Info, uint64_t, std::optional<std::string>)> cb) noexcept override {
-        spdlog::info("frpc::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
-                     frpc::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
-        frpc::Info info;
+                             std::function<void(std::string, fantasy::Info, uint64_t, std::optional<std::string>)> cb) noexcept override {
+        spdlog::info("fantasy::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
+                     fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
+        fantasy::Info info;
         info.name = "test";
         cb("hello world", std::move(info), 789, "2024");
     }
@@ -42,11 +42,11 @@ struct Handler final : public frpc::HelloWorldServerHandler {
 void start_server() {
     frpc::ChannelConfig bi_config{};
     bi_config.addr = addr;
-    auto server = frpc::HelloWorldServer::create(
+    auto server = fantasy::HelloWorldServer::create(
         bi_config,
         std::make_shared<Handler>(),
         [](std::string error) {
-            spdlog::error("frpc::HelloWorldServer error: {}", error);
+            spdlog::error("fantasy::HelloWorldServer error: {}", error);
         });
     auto monitor = std::make_unique<frpc::Monitor>(*(server->context()), *(server->socket()));
     auto event_cb = [](std::optional<std::tuple<zmq_event_t, std::string>> data) {
@@ -65,33 +65,33 @@ int main() {
 
     frpc::ChannelConfig bi_config{};
     bi_config.addr = addr;
-    auto client = frpc::HelloWorldClient::create(bi_config, [](std::string error) {
-        spdlog::error("frpc::HelloWorldClient error: {}", error);
+    auto client = fantasy::HelloWorldClient::create(bi_config, [](std::string error) {
+        spdlog::error("fantasy::HelloWorldClient error: {}", error);
     });
     client->start();
 
     client->hello_world(
         create_bank_info(),
-        std::string{"frpc-bank"},
+        std::string{"fantasy-bank"},
         999,
         "option",
-        [](std::string reply, frpc::Info info, uint64_t count, std::optional<std::string> date) {
-            spdlog::info("frpc::HelloWorldClient::hello_world recv: {},{},{},{}", reply, frpc::toString(info),
+        [](std::string reply, fantasy::Info info, uint64_t count, std::optional<std::string> date) {
+            spdlog::info("fantasy::HelloWorldClient::hello_world recv: {},{},{},{}", reply, fantasy::toString(info),
                          count, date.has_value() ? date.value() : "nullopt");
         });
 
     client->hello_world(
         create_bank_info(),
-        std::string{"frpc-bank-1"},
+        std::string{"fantasy-bank-1"},
         999,
         "option",
-        [](std::string reply, frpc::Info info, uint64_t count, std::optional<std::string> date) {
-            spdlog::info("frpc::HelloWorldClient::hello_world(timeout) recv: {},{},{},{}", reply, frpc::toString(info), count,
+        [](std::string reply, fantasy::Info info, uint64_t count, std::optional<std::string> date) {
+            spdlog::info("fantasy::HelloWorldClient::hello_world(timeout) recv: {},{},{},{}", reply, fantasy::toString(info), count,
                          date.has_value() ? date.value() : "nullopt");
         },
         std::chrono::milliseconds(200),
         [] {
-            spdlog::info("frpc::HelloWorldClient::timeout timeout!!!");
+            spdlog::info("fantasy::HelloWorldClient::timeout timeout!!!");
         });
 
     std::this_thread::sleep_for(std::chrono::seconds(10));

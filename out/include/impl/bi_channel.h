@@ -1,4 +1,16 @@
-namespace {{node.property.namespace}} {
+#ifndef _FRPC_BI_CHANNEL_H_
+#define _FRPC_BI_CHANNEL_H_
+
+#include <functional>
+#include <memory>
+#include <thread>
+
+#include <zmq.hpp>
+#include <zmq_addon.hpp>
+
+#include "utils.h"
+
+namespace frpc {
 
 class BiChannel final {
 public:
@@ -58,8 +70,8 @@ public:
 
     template <typename T>
     void send(T&& snd_msgs,
-        const std::chrono::milliseconds& timeout,
-        std::function<void()> cb) {
+              const std::chrono::milliseconds& timeout,
+              std::function<void()> cb) {
         std::lock_guard lk(m_mutex);
         if (!zmq::send_multipart(m_send, std::forward<decltype(snd_msgs)>(snd_msgs))) {
             m_error(FRPC_ERROR_FORMAT("send error!!!"));
@@ -212,4 +224,6 @@ private:
     std::shared_ptr<zmq::socket_t> m_monitor_socket_ptr{nullptr};
 };
 
-} // {{node.property.namespace}}
+} // namespace frpc
+
+#endif //_FRPC_BI_CHANNEL_H_

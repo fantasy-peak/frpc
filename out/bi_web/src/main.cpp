@@ -7,7 +7,7 @@
 #include <drogon/drogon.h>
 #include <spdlog/spdlog.h>
 
-#include <frpc.hpp>
+#include <fantasy.hpp>
 #include <string>
 
 using Callback = std::function<void(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&&)>;
@@ -34,13 +34,13 @@ void from_json(const nlohmann::json& j, std::optional<T>& v) {
 
 struct HelloWorldApi final {
     HelloWorldApi(frpc::ChannelConfig bi_config)
-        : m_client(frpc::HelloWorldClient::create(bi_config, [](std::string error) {
-            spdlog::error("frpc::HelloWorldClient error: {}", error);
+        : m_client(fantasy::HelloWorldClient::create(bi_config, [](std::string error) {
+            spdlog::error("fantasy::HelloWorldClient error: {}", error);
         })) {
         m_client->start();
     }
     void hello_world(const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
-        using namespace frpc;
+        using namespace fantasy;
         auto request = nlohmann::json::parse(http_request_ptr->getBody());
         auto bank_info = request["bank_info"].template get<BankInfo>();
         auto bank_name = request["bank_name"].template get<std::string>();
@@ -67,7 +67,7 @@ struct HelloWorldApi final {
                 callback(resp);
             });
     }
-    std::unique_ptr<frpc::HelloWorldClient> m_client;
+    std::unique_ptr<fantasy::HelloWorldClient> m_client;
 };
 
 int main(int argc, char** argv) {
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
         "/interface",
         [&](const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
             nlohmann::json json;
-            using namespace frpc;
+            using namespace fantasy;
             {
                 nlohmann::json tmp;
                 tmp["input"]["bank_info"] = BankInfo{};

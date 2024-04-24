@@ -4,7 +4,7 @@
 #include <spdlog/spdlog.h>
 #include <zmq.h>
 
-#include "frpc.hpp"
+#include "fantasy.hpp"
 
 inline std::string addr{"tcp://127.0.0.1:5878"};
 
@@ -13,7 +13,7 @@ void start(std::function<void()> func) {
 }
 
 #ifdef __cpp_impl_coroutine
-struct CoroHelloWorldReceiver final : public frpc::AsioCoroHelloWorldReceiverHandler {
+struct CoroHelloWorldReceiver final : public fantasy::AsioCoroHelloWorldReceiverHandler {
     virtual asio::awaitable<void> hello_world(std::string in) noexcept override {
         spdlog::info("CoroHelloWorldReceiver::hello_world: {}", in);
         co_return;
@@ -24,7 +24,7 @@ struct CoroHelloWorldReceiver final : public frpc::AsioCoroHelloWorldReceiverHan
     }
 };
 #else
-struct HelloWorldReceiverHandler final : public frpc::HelloWorldReceiverHandler {
+struct HelloWorldReceiverHandler final : public fantasy::HelloWorldReceiverHandler {
     HelloWorldReceiverHandler() = default;
     HelloWorldReceiverHandler(const std::string& label)
         : label(label) {
@@ -47,7 +47,7 @@ void start_publisher() {
     frpc::ChannelConfig pub_config{};
     pub_config.addr = addr;
     pub_config.socktype = zmq::socket_type::pub;
-    auto sender = frpc::HelloWorldSender::create(pub_config);
+    auto sender = fantasy::HelloWorldSender::create(pub_config);
 
     int i = 10;
     while (i--) {
@@ -64,7 +64,7 @@ int main() {
     sub_config.socktype = zmq::socket_type::sub;
     sub_config.addr = addr;
 
-    auto receiver = frpc::HelloWorldReceiver::create(
+    auto receiver = fantasy::HelloWorldReceiver::create(
         sub_config,
 #ifdef __cpp_impl_coroutine
         std::make_shared<CoroHelloWorldReceiver>(),

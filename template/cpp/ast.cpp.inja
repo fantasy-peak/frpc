@@ -1,80 +1,54 @@
 #ifndef _{{upper(node.property.namespace)}}_H_
 #define _{{upper(node.property.namespace)}}_H_
 
-#include <iostream>
 #include <variant>
-#include <string>
-#include <thread>
 #include <typeinfo>
-#include <functional>
 #include <optional>
-#include <memory>
 #include <unordered_map>
 #include <any>
 #include <mutex>
 #include <sstream>
-#ifdef __cpp_impl_coroutine
-#include <coroutine>
-#endif
-#include <optional>
 
-#include <msgpack.hpp>
-#include <uuid/uuid.h>
-#include <zmq.hpp>
-#include <zmq_addon.hpp>
 #include <nlohmann/json.hpp>
 
+#define FRPC_ERROR_FORMAT(message) [] (const std::string& info) { std::stringstream ss; ss << __FILE__ << ":" << __LINE__ << " " << info ; return ss.str(); } (message)
+
+#include <impl/bi_channel.h>
+#include <impl/uni_channel.h>
+#include <impl/monitor.h>
+#include <impl/utils.h>
+#include <impl/to_string.h>
 #ifdef __cpp_impl_coroutine
-#include <frpc_coroutine.h>
-#include <asio.hpp>
-#include <asio/experimental/concurrent_channel.hpp>
-
-{% include "asio_context_pool.inja" %}
-
+#include <impl/coroutine.h>
+#include <impl/asio_context_pool.h>
 #endif
 
-{% include "utils.inja" %}
-
-{% include "monitor.inja" %}
-
-{% include "bi_channel.inja" %}
-
-{% include "uni_channel.inja" %}
-
-{% for value in node.value %}
-	{% if value.type == "enum" %}
-			{% include "enum.inja" %}
-	{% endif %}
+{% for value in node.value.enum %}
+ #include <data/{{_snake(value.enum_name)}}.h>
 {% endfor %}
 
-{% for value in node.value %}
-	{% if value.type == "struct" %}
-			{% include "struct.inja" %}
-	{% endif %}
+// clang-format off
+{% for value in node.value.struct %}
+#include <data/{{_snake(value.struct_name)}}.h>
+{% endfor %}
+// clang-format on
+
+{% for value in node.value.interface %}
+    {% if value.pattern == "bi" %}
+        {% include "bi.inja" %}
+    {% endif %}
 {% endfor %}
 
-{% for value in node.value %}
-	{% if value.type == "interface" %}
-		{% if value.pattern == "bi" %}
-			{% include "bi.inja" %}
-		{% endif %}
-	{% endif %}
+{% for value in node.value.interface %}
+    {% if value.pattern == "uni" %}
+        {% include "uni.inja" %}
+    {% endif %}
 {% endfor %}
 
-{% for value in node.value %}
-	{% if value.type == "interface" %}
-		{% if value.pattern == "uni" %}
-			{% include "uni.inja" %}
-		{% endif %}
-	{% endif %}
-{% endfor %}
-
-{% for value in node.value %}
-	{% if value.type == "interface" %}
-		{% if value.pattern == "bi_stream" %}
-			{% include "bi_stream.inja" %}
-		{% endif %}
-	{% endif %}
+{% for value in node.value.interface %}
+    {% if value.pattern == "bi_stream" %}
+        {% include "bi_stream.inja" %}
+    {% endif %}
 {% endfor %}
 
 #endif //_{{upper(node.property.namespace)}}_H_

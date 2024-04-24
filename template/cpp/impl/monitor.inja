@@ -1,4 +1,14 @@
-namespace {{node.property.namespace}} {
+#ifndef _FRPC_MONITOR_H_
+#define _FRPC_MONITOR_H_
+
+#include <memory>
+#include <functional>
+#include <thread>
+
+#include <zmq.hpp>
+#include <zmq_addon.hpp>
+
+namespace frpc {
 
 inline std::string_view getEventName(uint16_t event_type) {
 	switch (event_type) {
@@ -110,4 +120,6 @@ private:
 	std::function<void(std::optional<std::tuple<zmq_event_t, std::string>>)> m_monitor_call_back{nullptr};
 };
 
-} // {{node.property.namespace}}
+} // frpc
+
+#endif // _FRPC_MONITOR_H_

@@ -3,7 +3,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "frpc.hpp"
+#include "fantasy.hpp"
 
 inline std::string addr{"tcp://127.0.0.1:5878"};
 
@@ -12,7 +12,7 @@ void start(std::function<void()> func) {
 }
 
 #ifdef __cpp_impl_coroutine
-struct CoroStreamServerHandler final : public frpc::CoroStreamServerHandler {
+struct CoroStreamServerHandler final : public fantasy::CoroStreamServerHandler {
     virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>> ins,
                                               std::shared_ptr<frpc::Stream<void(std::string)>> outs) noexcept override {
         start([outs = std::move(outs)]() mutable {
@@ -40,16 +40,16 @@ struct CoroStreamServerHandler final : public frpc::CoroStreamServerHandler {
 void start_server() {
     frpc::ChannelConfig bi_config{};
     bi_config.addr = addr;
-    auto server = frpc::StreamServer::create(
+    auto server = fantasy::StreamServer::create(
         bi_config,
         std::make_shared<CoroStreamServerHandler>(),
         [](std::string error) {
-            spdlog::error("frpc::StreamServer error: {}", error);
+            spdlog::error("fantasy::StreamServer error: {}", error);
         });
     server->monitor(
         [](std::tuple<zmq_event_t, std::string> data) {
             auto& [event, point] = data;
-            spdlog::info("frpc::StreamServer monitor: {} {}", frpc::getEventName(event.event), point);
+            spdlog::info("fantasy::StreamServer monitor: {} {}", frpc::getEventName(event.event), point);
         },
         ZMQ_EVENT_ACCEPTED | ZMQ_EVENT_DISCONNECTED);
     server->start();
@@ -59,13 +59,13 @@ void start_server() {
 asio::awaitable<void> start_client() {
     frpc::ChannelConfig bi_config{};
     bi_config.addr = addr;
-    auto client = frpc::StreamClient::create(bi_config, [](std::string error) {
-        spdlog::error("coro frpc::StreamClient error: {}", error);
+    auto client = fantasy::StreamClient::create(bi_config, [](std::string error) {
+        spdlog::error("coro fantasy::StreamClient error: {}", error);
     });
     client->monitor(
         [](std::tuple<zmq_event_t, std::string> data) {
             auto& [event, point] = data;
-            spdlog::info("frpc::StreamClient monitor: {} {}", frpc::getEventName(event.event), point);
+            spdlog::info("fantasy::StreamClient monitor: {} {}", frpc::getEventName(event.event), point);
         },
         ZMQ_EVENT_CONNECTED);
     client->start();

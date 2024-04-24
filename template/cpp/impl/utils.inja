@@ -1,6 +1,13 @@
-namespace {{node.property.namespace}} {
+#ifndef _FRPC_UTILS_H_
+#define _FRPC_UTILS_H_
 
-#define FRPC_ERROR_FORMAT(message) [] (const std::string& info) { std::stringstream ss; ss << __FILE__ << ":" << __LINE__ << " " << info ; return ss.str(); } (message)
+#include <string>
+#include <functional>
+
+#include <msgpack.hpp>
+#include <uuid/uuid.h>
+
+namespace frpc {
 
 template <class TObject>
 inline msgpack::sbuffer pack(const TObject& object) {
@@ -14,66 +21,6 @@ inline TObject unpack(const void* data, size_t size) {
     auto handle = msgpack::unpack(reinterpret_cast<const char*>(data), size);
     auto value = handle.get().as<TObject>();
     return value;
-}
-
-template <typename T>
-T fromString(const std::string&);
-
-template <typename T>
-inline std::enable_if_t<std::is_arithmetic<T>::value && !std::is_same<T, bool>::value, std::string> toString(T value) {
-    return std::to_string(value);
-}
-
-inline std::string toString(bool value) {
-    return value ? "true" : "false";
-}
-
-inline std::string toString(const std::string& value) {
-    return value;
-}
-
-template <typename T>
-inline std::string toString(const std::vector<T>& vector) {
-    std::string str = "[";
-    auto it = vector.begin();
-    if (it != vector.end()) {
-        str += toString(*it);
-        ++it;
-    }
-    for (; it != vector.end(); ++it) {
-        str += ",";
-        str += toString(*it);
-    }
-    str += "]";
-    return str;
-}
-
-template <typename K, typename V>
-inline std::string toString(const std::unordered_map<K, V>& map) {
-    std::string str = "{";
-    auto it = map.begin();
-    if (it != map.end()) {
-        str += toString(it->first);
-        str += "->";
-        str += toString(it->second);
-        ++it;
-    }
-    for (; it != map.end(); ++it) {
-        str += ",";
-        str += toString(it->first);
-        str += "->";
-        str += toString(it->second);
-    }
-    str += "}";
-    return str;
-}
-
-inline std::string uuid() {
-    uuid_t uuid;
-    char uuid_str[37];
-    uuid_generate_random(uuid);
-    uuid_unparse(uuid, uuid_str);
-    return std::string(uuid_str);
 }
 
 struct ChannelConfig {
@@ -135,4 +82,6 @@ private:
     std::function<void()> m_close;
 };
 
-} // {{node.property.namespace}}
+} // frpc
+
+#endif // _FRPC_UTILS_H_

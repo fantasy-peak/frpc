@@ -1,4 +1,16 @@
-namespace {{node.property.namespace}} {
+#ifndef _FRPC_UNI_CHANNEL_H_
+#define _FRPC_UNI_CHANNEL_H_
+
+#include <memory>
+#include <functional>
+#include <thread>
+
+#include <zmq.hpp>
+#include <zmq_addon.hpp>
+
+#include "utils.h"
+
+namespace frpc {
 
 struct UniChannel final {
 public:
@@ -134,4 +146,7 @@ private:
     std::shared_ptr<zmq::socket_t> m_monitor_socket_ptr{nullptr};
 };
 
-} // {{node.property.namespace}}
+} // frpc
+
+#endif //_FRPC_UNI_CHANNEL_H_
+
