@@ -38,7 +38,6 @@ namespace fantasy {
 
 enum class HelloWorldClientHelloWorldServer : uint16_t {
     hello_world = 1,
-
 };
 
 } // namespace fantasy
@@ -462,7 +461,6 @@ namespace fantasy {
 enum class HelloWorldSenderHelloWorldReceiver : uint16_t {
     hello_world = 1,
     notice = 2,
-
 };
 
 inline std::string_view toString(const HelloWorldSenderHelloWorldReceiver value) {
@@ -815,7 +813,6 @@ namespace fantasy {
 
 enum class StreamClientStreamServer : uint16_t {
     hello_world = 1,
-
 };
 
 } // namespace fantasy

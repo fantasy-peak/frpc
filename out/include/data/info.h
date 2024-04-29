@@ -21,4 +21,4 @@ inline std::string toString(const Info& value) {
 
 } // namespace fantasy
 
-#endif //_FANTASY_INFO_H_
+#endif // _FANTASY_INFO_H_

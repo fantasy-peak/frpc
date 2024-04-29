@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
-#include <iostream>
 #include <random>
 #include <unordered_map>
 
@@ -31,6 +31,7 @@ void copy_directory(const std::filesystem::path& source, const std::filesystem::
 }
 
 std::string toCppType(std::string type) {
+    boost::trim(type);
     auto convert = [](const auto& type) {
         static std::unordered_map<std::string, std::string> cpp_type_table{
             {"bool", "bool"},
@@ -202,7 +203,8 @@ void formatCode(const std::string& file, const std::string& content) {
     }
     char buffer[2048] = {};
     std::string result;
-    auto command = fmt::format("{} {}", "clang-format", file);
+    char* clang_format_path = std::getenv("FRPC_CLANG_FORMAT");
+    auto command = fmt::format("{} {}", clang_format_path ? clang_format_path : "clang-format", file);
     spdlog::info("start format {}", command);
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
@@ -305,7 +307,7 @@ auto sort(nlohmann::json json) {
             return v == *it;
         });
         if (it1 != vertex_map.end()) {
-            spdlog::info("{}", it1->first);
+            spdlog::debug("{}", it1->first);
             struct_json.emplace_back(std::move(struct_json_map[it1->first]));
         }
     }
@@ -339,7 +341,10 @@ auto parseYaml(const std::string& file) {
                 nlohmann::json j;
                 j["name"] = struct_val.first.as<std::string>();
                 j["type"] = toCppType(struct_val.second["type"].as<std::string>());
-                j["comment"] = struct_val.second["comment"].as<std::string>();
+                if (struct_val.second["comment"])
+                    j["comment"] = struct_val.second["comment"].as<std::string>();
+                else
+                    j["comment"] = "";
                 definitions_json.emplace_back(std::move(j));
             }
             data["definitions"] = std::move(definitions_json);
@@ -353,7 +358,10 @@ auto parseYaml(const std::string& file) {
                 nlohmann::json j;
                 j["name"] = struct_val.first.as<std::string>();
                 j["default"] = struct_val.second["default"].as<std::string>();
-                j["comment"] = struct_val.second["comment"].as<std::string>();
+                if (struct_val.second["comment"])
+                    j["comment"] = struct_val.second["comment"].as<std::string>();
+                else
+                    j["comment"] = "";
                 definitions_json.emplace_back(std::move(j));
             }
             data["definitions"] = std::move(definitions_json);
@@ -430,6 +438,7 @@ int main(int argc, char** argv) {
     a.add<std::string>("lang", 'l', "language", false, "cpp");
     a.add<std::string>("web_template", 'w', "web template directory", false, "");
     a.add<bool>("auto_sort", 's', "automatically sort structural dependencies", false, false);
+    a.add<bool>("debug", 'd', "open debug log", false, false);
     a.parse_check(argc, argv);
 
     auto filename = a.get<std::string>("filename");
@@ -438,24 +447,28 @@ int main(int argc, char** argv) {
     auto lang = a.get<std::string>("lang");
     auto web_template = a.get<std::string>("web_template");
     auto auto_sort = a.get<bool>("auto_sort");
+    auto debug = a.get<bool>("debug");
 
     spdlog::info("filename: {}", filename);
     if (inja_template_dir.back() == '/')
         inja_template_dir.pop_back();
     auto inja_template = std::format("{}/ast.cpp.inja", inja_template_dir);
     auto coro_template = std::format("{}/impl_coroutine.h.inja", inja_template_dir);
+    if (debug)
+        spdlog::set_level(spdlog::level::debug);
     spdlog::info("template: {}", inja_template);
     spdlog::info("output: {}", output);
     spdlog::info("lang: {}", lang);
     spdlog::info("auto_sort: {}", auto_sort);
     spdlog::info("coro template: {}", coro_template);
+    spdlog::info("debug: {}", debug);
 
     inja::Environment env = initEnv();
 
     nlohmann::json data = parseYaml(filename);
     if (auto_sort)
         data["node"]["value"] = sort(std::move(data["node"]["value"]));
-    spdlog::info("{}", data.dump(4));
+    spdlog::debug("{}", data.dump(4));
 
     std::filesystem::create_directories(std::format("{}/include", output));
     std::filesystem::create_directories(std::format("{}/include/impl", output));

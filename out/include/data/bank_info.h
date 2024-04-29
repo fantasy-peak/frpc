@@ -1,5 +1,5 @@
-#ifndef _FANTASY_BANKINFO_H_
-#define _FANTASY_BANKINFO_H_
+#ifndef _FANTASY_BANK_INFO_H_
+#define _FANTASY_BANK_INFO_H_
 
 namespace fantasy {
 
@@ -42,4 +42,4 @@ inline std::string toString(const BankInfo& value) {
 
 } // namespace fantasy
 
-#endif //_FANTASY_BANKINFO_H_
+#endif // _FANTASY_BANK_INFO_H_

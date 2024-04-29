@@ -1,5 +1,5 @@
-#ifndef _{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_
-#define _{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_
+#ifndef _{{upper(value.property.namespace)}}_{{upper(_snake(value.struct_name))}}_H_
+#define _{{upper(value.property.namespace)}}_{{upper(_snake(value.struct_name))}}_H_
 
 namespace {{value.property.namespace}} {
 
@@ -25,4 +25,4 @@ inline std::string toString(const {{value.struct_name}}& value) {
 
 } // {{value.property.namespace}}
 
-#endif //_{{upper(value.property.namespace)}}_{{upper(value.struct_name)}}_H_
+#endif // _{{upper(value.property.namespace)}}_{{upper(_snake(value.struct_name))}}_H_

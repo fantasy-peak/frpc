@@ -4,7 +4,6 @@ enum class {{value.caller}}{{value.callee}} : uint16_t {
     {% for func in value.definitions %}
         {{func.func_name}} = {{ loop.index1 }},
     {% endfor %}
-
 };
 
 } // {{node.property.namespace}}
@@ -20,7 +19,7 @@ public:
     {{value.caller}}(const frpc::ChannelConfig& config,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable {
+        , m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
@@ -32,7 +31,7 @@ public:
         const std::shared_ptr<zmq::socket_t>& socket_ptr,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
+        , m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
@@ -43,7 +42,7 @@ public:
         const std::shared_ptr<zmq::context_t>& context_ptr,
         std::function<void(std::string)> error)
         : m_config(config)
-        ,m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
+        , m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
             dispatch(recv_msgs);
         }))
         , m_error(error) {
