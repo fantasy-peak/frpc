@@ -314,10 +314,16 @@ auto sort(nlohmann::json json) {
     return json;
 }
 
-auto parseYaml(const std::string& file) {
+nlohmann::json parseYaml(const std::string& file) {
+    spdlog::info("start parse: {}", file);
     YAML::Node config = YAML::LoadFile(file);
     nlohmann::json ast;
+    ast["node"]["value"] = std::vector<nlohmann::json>{};
     std::string filename, namespace_str;
+    if (!config["property"]) {
+        spdlog::error("{} not contains property", file);
+        exit(1);
+    }
     for (const auto& kv : config) {
         nlohmann::json data;
         auto node_name = kv.first.as<std::string>();
@@ -327,6 +333,15 @@ auto parseYaml(const std::string& file) {
             filename = kv.second["filename"].as<std::string>();
             ast["node"][node_name]["filename"] = filename;
             ast["node"][node_name]["namespace"] = namespace_str;
+            if (kv.second["include"]) {
+                std::filesystem::path p = file;
+                auto include_yaml = kv.second["include"].as<std::vector<std::string>>();
+                for (auto& yaml : include_yaml) {
+                    auto in_ast = parseYaml(std::format("{}/{}", p.parent_path().string(), yaml));
+                    for (auto& value : in_ast["node"]["value"])
+                        ast["node"]["value"].emplace_back(std::move(value));
+                }
+            }
             continue;
         }
         data["node_name"] = node_name;
@@ -391,26 +406,25 @@ auto parseYaml(const std::string& file) {
         }
         ast["node"]["value"].emplace_back(std::move(data));
     }
-    std::vector<nlohmann::json> enum_json, struct_json, interface_json;
-    for (auto& j : ast["node"]["value"]) {
-        auto type = j["type"].get<std::string>();
-        if (type == "enum") {
-            enum_json.emplace_back(std::move(j));
-        } else if (type == "struct") {
-            struct_json.emplace_back(std::move(j));
-        } else if (type == "interface") {
-            interface_json.emplace_back(std::move(j));
-        } else {
-            spdlog::error("Unexpected type");
-            exit(1);
-        }
-    }
-    nlohmann::json j;
-    j["enum"] = enum_json;
-    j["struct"] = struct_json;
-    j["interface"] = interface_json;
-    ast["node"]["value"] = std::move(j);
     return ast;
+}
+
+void process(nlohmann::json& ast) {
+    auto filter = [&](const std::string& name) {
+        auto json =
+            ast["node"]["value"] |
+            std::views::filter([&](nlohmann::json& j) {
+                auto type = j["type"].get<std::string>();
+                return type == name;
+            }) |
+            to<std::vector<nlohmann::json>>();
+        return json;
+    };
+    nlohmann::json j;
+    j["enum"] = filter("enum");
+    j["struct"] = filter("struct");
+    j["interface"] = filter("interface");
+    ast["node"]["value"] = std::move(j);
 }
 
 inja::Environment initEnv() {
@@ -466,6 +480,7 @@ int main(int argc, char** argv) {
     inja::Environment env = initEnv();
 
     nlohmann::json data = parseYaml(filename);
+    process(data);
     if (auto_sort)
         data["node"]["value"] = sort(std::move(data["node"]["value"]));
     spdlog::debug("{}", data.dump(4));
