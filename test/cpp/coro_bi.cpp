@@ -21,7 +21,7 @@ auto create_bank_info() {
     bank_info.test_map_one.emplace("frpc", fantasy::TestType::EnumOne);
     bank_info.test_map.emplace(false, 555);
     bank_info.test_vector.emplace_back("vector");
-    bank_info.info.name = "rpc";
+    bank_info.info.name = std::nullopt;
     std::string bank_name = "zhongxin";
     return bank_info;
 }

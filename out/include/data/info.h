@@ -4,7 +4,7 @@
 namespace fantasy {
 
 struct Info {
-    std::string name; // test Name
+    std::optional<std::string> name; // test Name
 
     MSGPACK_DEFINE(name)
 };

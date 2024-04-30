@@ -12,26 +12,6 @@
 
 using Callback = std::function<void(const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&&)>;
 
-namespace nlohmann {
-
-template <class T>
-void to_json(nlohmann::json& j, const std::optional<T>& v) {
-    if (v.has_value())
-        j = *v;
-    else
-        j = nullptr;
-}
-
-template <class T>
-void from_json(const nlohmann::json& j, std::optional<T>& v) {
-    if (j.is_null())
-        v = std::nullopt;
-    else
-        v = j.get<T>();
-}
-
-} // namespace nlohmann
-
 struct HelloWorldApi final {
     HelloWorldApi(frpc::ChannelConfig bi_config)
         : m_client(fantasy::HelloWorldClient::create(bi_config, [](std::string error) {

@@ -55,6 +55,21 @@ inline std::string toString(const std::unordered_map<K, V>& map) {
     return str;
 }
 
+template<typename T>
+inline std::string toString(const std::optional<T> &opt) {
+   std::ostringstream ss;
+   if (opt) {
+      if constexpr (std::is_fundamental_v<T> || std::is_same_v<T, std::string>) {
+         ss << opt.value();
+      } else {
+         ss << toString(opt.value());
+      }
+   } else {
+      ss << "(nullopt)";
+   }
+   return ss.str();
+}
+
 } // {{node.property.namespace}}
 
 #endif //_{{upper(node.property.namespace)}}_TO_STRING_H_

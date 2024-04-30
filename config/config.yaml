@@ -12,7 +12,7 @@ TestType:
 Info:
   type: struct
   definitions:
-    Name: { type: string, comment: "test Name" }
+    Name: { type: option<string>, comment: "test Name" }
 
 BankInfo:
   type: struct
