@@ -19,11 +19,11 @@ struct BankInfo {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BankInfo, name, type, test_one, test_two, test_map_one, test_map, test_vector, info)
 
 inline std::string toString(const BankInfo& value) {
-    std::stringstream ss;
-    ss << "BankInfo{" << toString(value.name)
+    std::ostringstream ss;
+    ss << "BankInfo{" << value.name
        << "," << toString(value.type)
-       << "," << toString(value.test_one)
-       << "," << toString(value.test_two)
+       << "," << value.test_one
+       << "," << value.test_two
        << "," << toString(value.test_map_one)
        << "," << toString(value.test_map)
        << "," << toString(value.test_vector)

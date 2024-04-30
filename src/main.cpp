@@ -108,6 +108,13 @@ static std::unordered_map<std::string, std::string> CPP_TYPE_TABLE{
     {"double", "double"},
 };
 
+auto _is_fundamental(inja::Arguments& args) {
+    auto type = args.at(0)->get<std::string>();
+    if (CPP_TYPE_TABLE.contains(type) || type == "std::string")
+        return true;
+    return false;
+}
+
 static std::unordered_map<std::string, std::string> ENUM_NAME_TABLE;
 
 auto _format_args_to_const_ref(inja::Arguments& args) {
@@ -441,6 +448,7 @@ inja::Environment initEnv() {
     env.add_callback("_format_catch_move", 1, _format_catch_move);
     env.add_callback("_format_move_or_not", 2, _format_move_or_not);
     env.add_callback("_random", 2, _random);
+    env.add_callback("_is_fundamental", 1, _is_fundamental);
     return env;
 }
 
@@ -508,6 +516,8 @@ int main(int argc, char** argv) {
                 std::format("{}/include/impl/asio_context_pool.h", output), data);
     create_file(std::format("{}/impl/to_string.inja", inja_template_dir),
                 std::format("{}/include/impl/to_string.h", output), data);
+    create_file(std::format("{}/impl/from_string.inja", inja_template_dir),
+                std::format("{}/include/impl/from_string.h", output), data);
     for (auto& enum_json : data["node"]["value"]["enum"]) {
         nlohmann::json ast;
         auto enum_file_name = toSnakeCase(enum_json["enum_name"].get<std::string>());

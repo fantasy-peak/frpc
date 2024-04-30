@@ -18,6 +18,7 @@
 #include <impl/monitor.h>
 #include <impl/utils.h>
 #include <impl/to_string.h>
+#include <impl/from_string.h>
 #ifdef __cpp_impl_coroutine
 #include <impl/coroutine.h>
 #include <impl/asio_context_pool.h>

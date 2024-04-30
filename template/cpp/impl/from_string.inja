@@ -1,0 +1,11 @@
+#ifndef _{{upper(node.property.namespace)}}_FROM_STRING_H_
+#define _{{upper(node.property.namespace)}}_FROM_STRING_H_
+
+namespace {{node.property.namespace}} {
+
+template <typename T>
+T fromString(const std::string&);
+
+} // {{node.property.namespace}}
+
+#endif //_{{upper(node.property.namespace)}}_FROM_STRING_H_

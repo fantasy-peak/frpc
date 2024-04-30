@@ -14,12 +14,20 @@ struct {{value.struct_name}} {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE({{value.struct_name}}, {{_join(value.definitions)}})
 
 inline std::string toString(const {{value.struct_name}}& value) {
-    std::stringstream ss;
+    std::ostringstream ss;
     {% for field in value.definitions %}
         {% if loop.is_first %}
-            ss << "{{value.struct_name}}{" << toString(value.{{_snake(field.name)}})
+            {% if _is_fundamental(field.type) == true %}
+                ss << "{{value.struct_name}}{" << value.{{_snake(field.name)}}
+            {% else %}
+                ss << "{{value.struct_name}}{" << toString(value.{{_snake(field.name)}})
+            {% endif  %}
         {% else %}
-            << "," << toString(value.{{_snake(field.name)}})
+            {% if _is_fundamental(field.type) == true %}
+                << "," << value.{{_snake(field.name)}}
+            {% else %}
+                << "," << toString(value.{{_snake(field.name)}})
+            {% endif  %}
         {% endif  %}
     {% endfor %}
     << "}";

@@ -18,6 +18,7 @@
 }(message)
 
 #include <impl/bi_channel.h>
+#include <impl/from_string.h>
 #include <impl/monitor.h>
 #include <impl/to_string.h>
 #include <impl/uni_channel.h>

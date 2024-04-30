@@ -12,7 +12,7 @@ struct Info {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Info, name)
 
 inline std::string toString(const Info& value) {
-    std::stringstream ss;
+    std::ostringstream ss;
     ss << "Info{" << toString(value.name)
        << "}";
     return ss.str();

@@ -1,75 +1,76 @@
-#ifndef _FANTASY_TO_STRING_H_
-#define _FANTASY_TO_STRING_H_
+#ifndef _FRPC_TO_STRING_H_
+#define _FRPC_TO_STRING_H_
 
-namespace fantasy {
-
-template <typename T>
-T fromString(const std::string&);
+namespace std {
 
 template <typename T>
-inline std::enable_if_t<std::is_arithmetic<T>::value && !std::is_same<T, bool>::value, std::string> toString(T value) {
-    return std::to_string(value);
-}
+inline std::string toString(const std::vector<T>& vec) {
+    std::ostringstream ss;
 
-inline std::string_view toString(bool value) {
-    return value ? "true" : "false";
-}
-
-inline std::string toString(const std::string& value) {
-    return value;
-}
-
-template <typename T>
-inline std::string toString(const std::vector<T>& vector) {
-    std::string str = "[";
-    auto it = vector.begin();
-    if (it != vector.end()) {
-        str += toString(*it);
-        ++it;
+    ss << "[";
+    for (auto& i : vec) {
+        if constexpr (std::is_fundamental_v<T> || std::is_same_v<T, std::string>) {
+            if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+                ss << static_cast<int32_t>(i) << " ";
+            else
+                ss << i << ",";
+        } else {
+            ss << toString(i) << ",";
+        }
     }
-    for (; it != vector.end(); ++it) {
-        str += ",";
-        str += toString(*it);
-    }
-    str += "]";
-    return str;
+    ss << "]";
+
+    return ss.str();
 }
 
 template <typename K, typename V>
 inline std::string toString(const std::unordered_map<K, V>& map) {
-    std::string str = "{";
-    auto it = map.begin();
-    if (it != map.end()) {
-        str += toString(it->first);
-        str += "->";
-        str += toString(it->second);
-        ++it;
+    std::ostringstream ss;
+
+    ss << "{";
+    for (auto& [k, v] : map) {
+        if constexpr (std::is_fundamental_v<K> || std::is_same_v<K, std::string>) {
+            if constexpr (std::is_same_v<K, uint8_t> || std::is_same_v<K, int8_t>)
+                ss << static_cast<int32_t>(k) << "=";
+            else
+                ss << k << "=";
+        } else {
+            ss << toString(k) << "=";
+        }
+        if constexpr (std::is_fundamental_v<V> || std::is_same_v<V, std::string>) {
+            if constexpr (std::is_same_v<V, uint8_t> || std::is_same_v<V, int8_t>)
+                ss << static_cast<int32_t>(v) << ",";
+            else
+                ss << v << ",";
+        } else {
+            ss << toString(v) << ",";
+        }
     }
-    for (; it != map.end(); ++it) {
-        str += ",";
-        str += toString(it->first);
-        str += "->";
-        str += toString(it->second);
-    }
-    str += "}";
-    return str;
+    ss << "}";
+
+    return ss.str();
 }
 
 template <typename T>
 inline std::string toString(const std::optional<T>& opt) {
     std::ostringstream ss;
+
     if (opt) {
         if constexpr (std::is_fundamental_v<T> || std::is_same_v<T, std::string>) {
-            ss << opt.value();
+            if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+                ss << static_cast<int32_t>(opt.value());
+            else
+                ss << opt.value();
         } else {
             ss << toString(opt.value());
         }
     } else {
         ss << "(nullopt)";
     }
+
     return ss.str();
 }
 
-} // namespace fantasy
+} // namespace std
 
-#endif //_FANTASY_TO_STRING_H_
+#endif //_FRPC_TO_STRING_H_
