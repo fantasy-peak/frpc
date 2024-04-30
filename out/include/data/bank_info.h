@@ -40,6 +40,21 @@ inline std::string toString(const BankInfo& value) {
     return str;
 }
 
+inline bool operator==(const BankInfo& lhs, const BankInfo& rhs) {
+    return (lhs.name == rhs.name) &&
+           (lhs.type == rhs.type) &&
+           (lhs.test_one == rhs.test_one) &&
+           (lhs.test_two == rhs.test_two) &&
+           (lhs.test_map_one == rhs.test_map_one) &&
+           (lhs.test_map == rhs.test_map) &&
+           (lhs.test_vector == rhs.test_vector) &&
+           (lhs.info == rhs.info);
+}
+
+inline bool operator!=(const BankInfo& lhs, const BankInfo& rhs) {
+    return !(lhs == rhs);
+}
+
 } // namespace fantasy
 
 #endif // _FANTASY_BANK_INFO_H_

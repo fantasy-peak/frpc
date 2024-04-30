@@ -35,3 +35,4 @@ inline {{value.enum_name}} fromString<{{value.enum_name}}>(const std::string& va
 } // {{value.property.namespace}}
 
 MSGPACK_ADD_ENUM({{value.property.namespace}}::{{value.enum_name}})
+

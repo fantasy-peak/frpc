@@ -19,6 +19,14 @@ inline std::string toString(const Info& value) {
     return str;
 }
 
+inline bool operator==(const Info& lhs, const Info& rhs) {
+    return (lhs.name == rhs.name);
+}
+
+inline bool operator!=(const Info& lhs, const Info& rhs) {
+    return !(lhs == rhs);
+}
+
 } // namespace fantasy
 
 #endif // _FANTASY_INFO_H_

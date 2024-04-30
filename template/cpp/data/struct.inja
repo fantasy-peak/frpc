@@ -4,23 +4,40 @@
 namespace {{value.property.namespace}} {
 
 struct {{value.struct_name}} {
-	{% for field in value.definitions %}
-		{{field.type}} {{_snake(field.name)}}; // {{field.comment}}
-	{% endfor %}
+    {% for field in value.definitions %}
+        {{field.type}} {{_snake(field.name)}}; // {{field.comment}}
+    {% endfor %}
 
-	MSGPACK_DEFINE({{_join(value.definitions)}})
+    MSGPACK_DEFINE({{_join(value.definitions)}})
 };
 
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE({{value.struct_name}}, {{_join(value.definitions)}})
 
 inline std::string toString(const {{value.struct_name}}& value) {
-	std::string str = "{{value.struct_name}}{";
-	{% for field in value.definitions %}
-		str += toString(value.{{_snake(field.name)}});
-		str += ",";
-	{% endfor %}
-	str += "}";
-	return str;
+    std::string str = "{{value.struct_name}}{";
+    {% for field in value.definitions %}
+        str += toString(value.{{_snake(field.name)}});
+        str += ",";
+    {% endfor %}
+    str += "}";
+    return str;
+}
+
+inline bool operator==(const {{value.struct_name}}& lhs, const {{value.struct_name}}& rhs) {
+    return 
+    {% for field in value.definitions %}
+        {% if loop.is_first %}
+            (lhs.{{_snake(field.name)}} == rhs.{{_snake(field.name)}})
+        {% else %}
+            &&
+            (lhs.{{_snake(field.name)}} == rhs.{{_snake(field.name)}})
+        {% endif  %}
+    {% endfor %}
+    ;
+}
+
+inline bool operator!=(const {{value.struct_name}}& lhs, const {{value.struct_name}}& rhs) {
+    return !(lhs == rhs);
 }
 
 } // {{value.property.namespace}}
