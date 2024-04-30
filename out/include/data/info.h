@@ -12,11 +12,10 @@ struct Info {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Info, name)
 
 inline std::string toString(const Info& value) {
-    std::string str = "Info{";
-    str += toString(value.name);
-    str += ",";
-    str += "}";
-    return str;
+    std::stringstream ss;
+    ss << "Info{" << toString(value.name)
+       << "}";
+    return ss.str();
 }
 
 inline bool operator==(const Info& lhs, const Info& rhs) {

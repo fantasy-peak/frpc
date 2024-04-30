@@ -11,7 +11,7 @@ inline std::enable_if_t<std::is_arithmetic<T>::value && !std::is_same<T, bool>::
     return std::to_string(value);
 }
 
-inline std::string toString(bool value) {
+inline std::string_view toString(bool value) {
     return value ? "true" : "false";
 }
 

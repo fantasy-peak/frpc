@@ -14,13 +14,16 @@ struct {{value.struct_name}} {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE({{value.struct_name}}, {{_join(value.definitions)}})
 
 inline std::string toString(const {{value.struct_name}}& value) {
-    std::string str = "{{value.struct_name}}{";
+    std::stringstream ss;
     {% for field in value.definitions %}
-        str += toString(value.{{_snake(field.name)}});
-        str += ",";
+        {% if loop.is_first %}
+            ss << "{{value.struct_name}}{" << toString(value.{{_snake(field.name)}})
+        {% else %}
+            << "," << toString(value.{{_snake(field.name)}})
+        {% endif  %}
     {% endfor %}
-    str += "}";
-    return str;
+    << "}";
+    return ss.str();
 }
 
 inline bool operator==(const {{value.struct_name}}& lhs, const {{value.struct_name}}& rhs) {

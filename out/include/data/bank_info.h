@@ -19,25 +19,17 @@ struct BankInfo {
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BankInfo, name, type, test_one, test_two, test_map_one, test_map, test_vector, info)
 
 inline std::string toString(const BankInfo& value) {
-    std::string str = "BankInfo{";
-    str += toString(value.name);
-    str += ",";
-    str += toString(value.type);
-    str += ",";
-    str += toString(value.test_one);
-    str += ",";
-    str += toString(value.test_two);
-    str += ",";
-    str += toString(value.test_map_one);
-    str += ",";
-    str += toString(value.test_map);
-    str += ",";
-    str += toString(value.test_vector);
-    str += ",";
-    str += toString(value.info);
-    str += ",";
-    str += "}";
-    return str;
+    std::stringstream ss;
+    ss << "BankInfo{" << toString(value.name)
+       << "," << toString(value.type)
+       << "," << toString(value.test_one)
+       << "," << toString(value.test_two)
+       << "," << toString(value.test_map_one)
+       << "," << toString(value.test_map)
+       << "," << toString(value.test_vector)
+       << "," << toString(value.info)
+       << "}";
+    return ss.str();
 }
 
 inline bool operator==(const BankInfo& lhs, const BankInfo& rhs) {
