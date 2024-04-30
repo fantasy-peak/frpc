@@ -53,13 +53,9 @@ public:
 
         void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) {
             auto req_id = m_req_id.fetch_add(1);
-            auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
-            auto buffer = frpc::pack<decltype(header)>(header);
-            auto packet = frpc::pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
-
-            std::vector<zmq::message_t> snd_bufs;
-            snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
-            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+            auto snd_bufs = makeRequestPacket<{{value.caller}}{{value.callee}}::{{func.func_name}}>(
+                req_id,
+                std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
             {
                 std::lock_guard lk(m_mtx);
                 m_cb.emplace(req_id, std::move(cb));
@@ -72,13 +68,9 @@ public:
             const std::chrono::milliseconds& timeout,
             std::function<void()> timeout_cb) {
             auto req_id = m_req_id.fetch_add(1);
-            auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
-            auto buffer = frpc::pack<decltype(header)>(header);
-            auto packet = frpc::pack<std::tuple<{{_format_args_type(func.inputs)}}>>(std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
-
-            std::vector<zmq::message_t> snd_bufs;
-            snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
-            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+            auto snd_bufs = makeRequestPacket<{{value.caller}}{{value.callee}}::{{func.func_name}}>(
+                req_id,
+                std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
             {
                 std::lock_guard lk(m_mtx);
                 m_cb.emplace(req_id, std::move(cb));
@@ -181,6 +173,18 @@ public:
     }
 
 private:
+    template <{{value.caller}}{{value.callee}} type, typename T>
+    std::vector<zmq::message_t> makeRequestPacket(uint64_t req_id, T&& t) {
+        auto header = std::make_tuple(req_id, type);
+        auto buffer = frpc::pack<decltype(header)>(header);
+        auto packet = frpc::pack<T>(std::forward<T>(t));
+
+        std::vector<zmq::message_t> snd_bufs;
+        snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
+        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+        return snd_bufs;
+    }
+
     void callTimeoutCallback(uint64_t req_id) {
         std::unique_lock lk(m_mtx);
         if (m_timeout_cb.find(req_id) == m_timeout_cb.end())

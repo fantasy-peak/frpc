@@ -92,13 +92,9 @@ public:
 
     void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
         auto req_id = m_req_id.fetch_add(1);
-        auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
-        auto buffer = frpc::pack<decltype(header)>(header);
-        auto packet = frpc::pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
-
-        std::vector<zmq::message_t> snd_bufs;
-        snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
-        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+        auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
+            req_id,
+            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -111,13 +107,9 @@ public:
                      const std::chrono::milliseconds& timeout,
                      std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
-        auto header = std::make_tuple(req_id, HelloWorldClientHelloWorldServer::hello_world);
-        auto buffer = frpc::pack<decltype(header)>(header);
-        auto packet = frpc::pack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
-
-        std::vector<zmq::message_t> snd_bufs;
-        snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
-        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+        auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
+            req_id,
+            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -219,6 +211,18 @@ public:
     }
 
 private:
+    template <HelloWorldClientHelloWorldServer type, typename T>
+    std::vector<zmq::message_t> makeRequestPacket(uint64_t req_id, T&& t) {
+        auto header = std::make_tuple(req_id, type);
+        auto buffer = frpc::pack<decltype(header)>(header);
+        auto packet = frpc::pack<T>(std::forward<T>(t));
+
+        std::vector<zmq::message_t> snd_bufs;
+        snd_bufs.emplace_back(zmq::message_t(buffer.data(), buffer.size()));
+        snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+        return snd_bufs;
+    }
+
     void callTimeoutCallback(uint64_t req_id) {
         std::unique_lock lk(m_mtx);
         if (m_timeout_cb.find(req_id) == m_timeout_cb.end())
