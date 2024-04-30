@@ -18,7 +18,25 @@ inline auto extract(const std::string& input) {
     return extracted_string;
 }
 
+inline bool isSnakeCase(const std::string& str) {
+    for (char c : str) {
+        if (!(islower(c) || c == '_')) {
+            return false;
+        }
+    }
+    if (str.front() == '_' || str.back() == '_') {
+        return false;
+    }
+    size_t pos = str.find("__");
+    if (pos != std::string::npos) {
+        return false;
+    }
+    return true;
+}
+
 inline auto toSnakeCase(const std::string& input) {
+    if (isSnakeCase(input))
+        return input;
     std::string snake_case;
     bool last_was_upper = false;
     for (char c : input) {
