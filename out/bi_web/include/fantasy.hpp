@@ -242,7 +242,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[0].data(), recv_bufs[0].size());
+            using FrpcHeader = std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
             std::unique_lock lk(m_mtx);
             if (m_cb.find(req_id) == m_cb.end())
                 return;
@@ -397,7 +398,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[1].data(), recv_bufs[1].size());
+            using FrpcHeader = std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
                     auto tp = frpc::unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>, frpc::DateTime>>(recv_bufs[2].data(), recv_bufs[2].size());
@@ -944,7 +946,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type, is_close] = frpc::unpack<std::tuple<uint64_t, StreamClientStreamServer, bool>>(recv_bufs[0].data(), recv_bufs[0].size());
+            using FrpcHeader = std::tuple<uint64_t, StreamClientStreamServer, bool>;
+            auto [req_id, req_type, is_close] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
             if (is_close) {
                 std::unique_lock lk(m_mtx);
                 m_cb.erase(req_id);
@@ -1095,7 +1098,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, StreamClientStreamServer>>(recv_bufs[1].data(), recv_bufs[1].size());
+            using FrpcHeader = std::tuple<uint64_t, StreamClientStreamServer>;
+            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch (req_type) {
                 case StreamClientStreamServer::hello_world: {
                     auto tp = frpc::unpack<std::tuple<std::string>>(recv_bufs[2].data(), recv_bufs[2].size());

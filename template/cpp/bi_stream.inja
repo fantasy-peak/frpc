@@ -130,7 +130,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type, is_close] = frpc::unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>>(recv_bufs[0].data(), recv_bufs[0].size());
+            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>;
+            auto [req_id, req_type, is_close] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
             if (is_close) {
                 std::unique_lock lk(m_mtx);
                 m_cb.erase(req_id);
@@ -281,7 +282,8 @@ private:
             return;
         }
         try {
-            auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, {{value.caller}}{{value.callee}}>>(recv_bufs[1].data(), recv_bufs[1].size());
+            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}>;
+            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch(req_type) {
             {% for func in value.definitions %}
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
