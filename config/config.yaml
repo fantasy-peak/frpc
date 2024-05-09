@@ -25,6 +25,7 @@ BankInfo:
     TestMap: { type: map<bool;u32>, comment: "test map" }
     TestVector: { type: vector<string>, comment: "test map" }
     Info: { type: Info, comment: "Info" }
+    DateTime: { type: DateTime, comment: "date time" }
 
 HelloWorldApi:
   type: interface
@@ -41,6 +42,7 @@ HelloWorldApi:
         bank_name: {type: string}
         blance: {type: u64}
         date: {type: option<string>}
+        date_time: {type: DateTime}
       outputs:
         reply: {type: string}
         info: {type: Info}

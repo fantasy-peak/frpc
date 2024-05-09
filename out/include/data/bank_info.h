@@ -12,11 +12,12 @@ struct BankInfo {
     std::unordered_map<bool, uint32_t> test_map;            // test map
     std::vector<std::string> test_vector;                   // test map
     Info info;                                              // Info
+    frpc::DateTime date_time;                               // date time
 
-    MSGPACK_DEFINE(name, type, test_one, test_two, test_map_one, test_map, test_vector, info)
+    MSGPACK_DEFINE(name, type, test_one, test_two, test_map_one, test_map, test_vector, info, date_time)
 };
 
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BankInfo, name, type, test_one, test_two, test_map_one, test_map, test_vector, info)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(BankInfo, name, type, test_one, test_two, test_map_one, test_map, test_vector, info, date_time)
 
 inline std::string toString(const BankInfo& value) {
     std::ostringstream ss;
@@ -28,6 +29,7 @@ inline std::string toString(const BankInfo& value) {
        << "," << toString(value.test_map)
        << "," << toString(value.test_vector)
        << "," << toString(value.info)
+       << "," << toString(value.date_time)
        << "}";
     return ss.str();
 }
@@ -40,7 +42,8 @@ inline bool operator==(const BankInfo& lhs, const BankInfo& rhs) {
            (lhs.test_map_one == rhs.test_map_one) &&
            (lhs.test_map == rhs.test_map) &&
            (lhs.test_vector == rhs.test_vector) &&
-           (lhs.info == rhs.info);
+           (lhs.info == rhs.info) &&
+           (lhs.date_time == rhs.date_time);
 }
 
 inline bool operator!=(const BankInfo& lhs, const BankInfo& rhs) {

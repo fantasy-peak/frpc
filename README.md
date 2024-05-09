@@ -42,9 +42,9 @@ xmake install -o . --file=./test_xmake.lua
 | i16     | int16_t            | option  | std::optional      |
 | u16     | uint16_t           | string  | std::string        |
 | i32     | int32_t            | map     | std::unordered_map |
-| u32     | uint32_t           |         |                    |
-| i64     | int64_t            |         |                    |
-| u64     | uint64_t           |         |                    |
+| u32     | uint32_t           | DateTime| frpc::DateTime     |
+| i64     | int64_t            | Date    | frpc::Date         |
+| u64     | uint64_t           | Time    | frpc::Time         |
 
 
 ## Protocol Definition

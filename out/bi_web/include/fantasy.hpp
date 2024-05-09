@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <variant>
 
+#include <msgpack.hpp>
 #include <nlohmann/json.hpp>
 
 #define FRPC_ERROR_FORMAT(message) [](const std::string& info) { \
@@ -17,20 +18,21 @@
     return ss.str();                                             \
 }(message)
 
+// clang-format off
 #include <impl/bi_channel.h>
-#include <impl/from_string.h>
-#include <impl/monitor.h>
-#include <impl/to_string.h>
 #include <impl/uni_channel.h>
+#include <impl/monitor.h>
 #include <impl/utils.h>
+#include <impl/to_string.h>
+#include <impl/from_string.h>
+#include <impl/date_time.h>
 #ifdef __cpp_impl_coroutine
-#include <impl/asio_context_pool.h>
 #include <impl/coroutine.h>
+#include <impl/asio_context_pool.h>
 #endif
 
-#include <data/test_type.h>
+ #include <data/test_type.h>
 
-// clang-format off
 #include <data/info.h>
 #include <data/bank_info.h>
 // clang-format on
@@ -90,11 +92,11 @@ public:
         return m_channel->monitor(std::move(cb), events);
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
+    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
             req_id,
-            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
+            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -102,14 +104,14 @@ public:
         m_channel->send(std::move(snd_bufs));
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date,
+    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time,
                      std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
                      const std::chrono::milliseconds& timeout,
                      std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
         auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
             req_id,
-            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date)));
+            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -121,12 +123,12 @@ public:
     }
 #ifdef __cpp_impl_coroutine
     template <asio::completion_token_for<void(std::string, Info, uint64_t, std::optional<std::string>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, CompletionToken&& token) {
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void(std::string, Info, uint64_t, std::optional<std::string>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date) mutable {
+            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
                     [handler_ptr = std::move(handler_ptr)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
                         asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
@@ -135,16 +137,16 @@ public:
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(date));
+            std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time);
     }
 
     template <asio::completion_token_for<void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const auto& timeout) mutable {
+            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const auto& timeout) mutable {
                 auto handler_ptr = std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
                     [handler_ptr](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
                         asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
@@ -160,13 +162,13 @@ public:
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(date), timeout);
+            std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, timeout);
     }
 
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date) {
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time) {
         return frpc::CallbackAwaiter<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>{
-            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date)](std::coroutine_handle<> handle, auto set_resume_value) mutable {
-                this->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date),
+            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), date_time](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+                this->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
                                   [handle, set_resume_value = std::move(set_resume_value)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                                       set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                                       handle.resume();
@@ -174,11 +176,11 @@ public:
             }};
     }
 
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, const std::chrono::milliseconds& timeout) {
+    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const std::chrono::milliseconds& timeout) {
         return frpc::CallbackAwaiter<std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>>{
-            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), &timeout](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), date_time, &timeout](std::coroutine_handle<> handle, auto set_resume_value) mutable {
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date),
+                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
                     [handle, set_resume_value](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                         set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
                         handle.resume();
@@ -276,22 +278,22 @@ private:
 };
 
 struct HelloWorldServerHandler {
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 };
 
 struct AsioCoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #endif
 };
 
 struct FrpcCoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual frpc::Task<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual frpc::Task<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
 #endif
 };
 
@@ -398,7 +400,7 @@ private:
             auto [req_id, req_type] = frpc::unpack<std::tuple<uint64_t, HelloWorldClientHelloWorldServer>>(recv_bufs[1].data(), recv_bufs[1].size());
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
-                    auto tp = frpc::unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    auto tp = frpc::unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>, frpc::DateTime>>(recv_bufs[2].data(), recv_bufs[2].size());
                     auto recv_bufs_ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
                     // Don't call it in multiple threads
                     std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [done = false, recv_bufs_ptr = std::move(recv_bufs_ptr), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
@@ -411,27 +413,27 @@ private:
                         m_channel->send(std::move(snd_bufs));
                     };
                     std::visit([&](auto&& arg) mutable {
-                        auto& [bank_info, bank_name, blance, date] = tp;
+                        auto& [bank_info, bank_name, blance, date, date_time] = tp;
                         using T = std::decay_t<decltype(arg)>;
                         if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
                         } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldServerHandler>>) {
 #ifdef __cpp_impl_coroutine
                             asio::co_spawn(
                                 m_pool_ptr->getIoContext(),
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out)),
+                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out)),
                                 asio::detached);
 #else
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
 #endif
                         } else {
 #ifdef __cpp_impl_coroutine
                             [](auto& arg, auto tp, auto out) mutable -> frpc::AsyncTask {
-                                auto& [bank_info, bank_name, blance, date] = tp;
-                                co_await arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                                auto& [bank_info, bank_name, blance, date, date_time] = tp;
+                                co_await arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
                             }(arg, std::move(tp), std::move(out));
 #else
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), std::move(out));
+                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
 #endif
                         }
                     },

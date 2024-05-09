@@ -4,6 +4,19 @@ content-type: application/json
 
 {
 	"bank_info": {
+		"date_time": {
+			"date": {
+				"day": 0,
+				"month": 0,
+				"year": 0
+			},
+			"time": {
+				"hour": 0,
+				"microsecond": 0,
+				"minute": 0,
+				"second": 0
+			}
+		},
 		"info": {
 			"name": "rpc"
 		},
@@ -21,7 +34,20 @@ content-type: application/json
 	},
 	"bank_name": "web back",
 	"blance": 895,
-	"date": "20240888"
+	"date": "20240888",
+	"date_time": {
+		"date": {
+			"day": 0,
+			"month": 0,
+			"year": 0
+		},
+		"time": {
+			"hour": 0,
+			"microsecond": 0,
+			"minute": 0,
+			"second": 0
+		}
+	}
 }
 
 ### Query interface input/output parameters

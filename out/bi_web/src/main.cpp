@@ -26,9 +26,10 @@ struct HelloWorldApi final {
         auto bank_name = request["bank_name"].template get<std::string>();
         auto blance = request["blance"].template get<uint64_t>();
         auto date = request["date"].template get<std::optional<std::string>>();
+        auto date_time = request["date_time"].template get<frpc::DateTime>();
         static std::chrono::milliseconds timeout(9000);
         m_client->hello_world(
-            std::move(bank_info), std::move(bank_name), blance, std::move(date),
+            std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
             [callback](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
                 nlohmann::json json;
                 json["reply"] = std::move(reply);
@@ -75,6 +76,7 @@ int main(int argc, char** argv) {
                 tmp["input"]["bank_name"] = std::string{};
                 tmp["input"]["blance"] = uint64_t{};
                 tmp["input"]["date"] = std::optional<std::string>{};
+                tmp["input"]["date_time"] = frpc::DateTime{};
                 tmp["output"]["reply"] = std::string{};
                 tmp["output"]["info"] = Info{};
                 tmp["output"]["count"] = uint64_t{};

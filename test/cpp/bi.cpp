@@ -21,7 +21,7 @@ auto create_bank_info() {
     bank_info.test_map.emplace(false, 555);
     bank_info.test_vector.emplace_back("vector");
     bank_info.info.name = "rpc";
-    std::string bank_name = "zhongxin";
+    bank_info.date_time = frpc::getFrpcDateTime();
     return bank_info;
 }
 
@@ -30,9 +30,10 @@ struct Handler final : public fantasy::HelloWorldServerHandler {
                              std::string bank_name,
                              uint64_t blance,
                              std::optional<std::string> date,
+                             frpc::DateTime date_time,
                              std::function<void(std::string, fantasy::Info, uint64_t, std::optional<std::string>)> cb) noexcept override {
-        spdlog::info("fantasy::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
-                     fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
+        spdlog::info("fantasy::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}, date_time: {}",
+                     fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt", frpc::toString(date_time));
         fantasy::Info info;
         info.name = "test";
         cb("hello world", std::move(info), 789, "2024");
@@ -75,6 +76,7 @@ int main() {
         std::string{"fantasy-bank"},
         999,
         "option",
+        frpc::getFrpcDateTime(),
         [](std::string reply, fantasy::Info info, uint64_t count, std::optional<std::string> date) {
             spdlog::info("fantasy::HelloWorldClient::hello_world recv: {},{},{},{}", reply, fantasy::toString(info),
                          count, date.has_value() ? date.value() : "nullopt");
@@ -85,6 +87,7 @@ int main() {
         std::string{"fantasy-bank-1"},
         999,
         "option",
+        frpc::getFrpcDateTime(),
         [](std::string reply, fantasy::Info info, uint64_t count, std::optional<std::string> date) {
             spdlog::info("fantasy::HelloWorldClient::hello_world(timeout) recv: {},{},{},{}", reply, fantasy::toString(info), count,
                          date.has_value() ? date.value() : "nullopt");

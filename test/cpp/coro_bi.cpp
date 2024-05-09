@@ -22,7 +22,7 @@ auto create_bank_info() {
     bank_info.test_map.emplace(false, 555);
     bank_info.test_vector.emplace_back("vector");
     bank_info.info.name = std::nullopt;
-    std::string bank_name = "zhongxin";
+    bank_info.date_time = frpc::getFrpcDateTime();
     return bank_info;
 }
 
@@ -31,9 +31,10 @@ struct CoroHandler final : public fantasy::AsioCoroHelloWorldServerHandler {
                                               std::string bank_name,
                                               uint64_t blance,
                                               std::optional<std::string> date,
+                                              frpc::DateTime date_time,
                                               std::function<void(std::string, fantasy::Info, uint64_t, std::optional<std::string>)> cb) noexcept override {
-        spdlog::info("coro fantasy::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}",
-                     fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt");
+        spdlog::info("coro fantasy::HelloWorldServer server recv: {}, bank_name: {}, blance: {}, date: {}, date_time: {}",
+                     fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt", frpc::toString(date_time));
         fantasy::Info info;
         info.name = "coro test";
         cb("coro hello world", std::move(info), 556, std::nullopt);
@@ -50,10 +51,10 @@ asio::awaitable<void> start_client() {
     client->start();
     spdlog::info("start coro client.");
 
-    auto [reply, info, count, date] = co_await client->hello_world_coro(create_bank_info(), "HF", 777, std::nullopt, asio::as_tuple(asio::use_awaitable));
+    auto [reply, info, count, date] = co_await client->hello_world_coro(create_bank_info(), "HF", 777, std::nullopt, frpc::getFrpcDateTime(), asio::as_tuple(asio::use_awaitable));
     spdlog::info("coro fantasy::HelloWorldClient::hello_world recv: {},{},{},{}", reply, fantasy::toString(info), count, date.has_value() ? date.value() : "nullopt");
 
-    auto ret = co_await client->hello_world_coro(create_bank_info(), "HF", 666, std::nullopt, std::chrono::milliseconds{500}, asio::use_awaitable);
+    auto ret = co_await client->hello_world_coro(create_bank_info(), "HF", 666, std::nullopt, frpc::getFrpcDateTime(), std::chrono::milliseconds{500}, asio::use_awaitable);
     if (ret.has_value()) {
         auto [reply, info, count, date] = ret.value();
         spdlog::info("coro fantasy::HelloWorldClient::hello_world recv: {},{},{},{}", reply, fantasy::toString(info), count, date.has_value() ? date.value() : "nullopt");

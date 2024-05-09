@@ -30,6 +30,12 @@ inline std::unordered_map<std::string, std::string> CPP_TYPE_TABLE{
     {"double", "double"},
 };
 
+inline std::unordered_map<std::string, std::string> FRPC_BASE_TYPE_TABLE{
+    {"frpc::DateTime", "frpc::DateTime"},
+    {"frpc::Date", "frpc::Date"},
+    {"frpc::Time", "frpc::Time"},
+};
+
 void copy_directory(const std::filesystem::path& source, const std::filesystem::path& destination) {
     if (!std::filesystem::exists(destination)) {
         std::filesystem::create_directories(destination);
@@ -44,10 +50,10 @@ void copy_directory(const std::filesystem::path& source, const std::filesystem::
     }
 }
 
-std::string toCppType(std::string type) {
+std::string convertType(std::string type) {
     boost::trim(type);
     auto convert = [](const auto& type) {
-        static std::unordered_map<std::string, std::string> cpp_type_table{
+        static std::unordered_map<std::string, std::string> type_mapping_table{
             {"bool", "bool"},
             {"i8", "int8_t"},
             {"u8", "uint8_t"},
@@ -60,9 +66,12 @@ std::string toCppType(std::string type) {
             {"f32", "float"},
             {"f64", "double"},
             {"string", "std::string"},
+            {"DateTime", "frpc::DateTime"},
+            {"Date", "frpc::Date"},
+            {"Time", "frpc::Time"},
         };
-        if (cpp_type_table.contains(type))
-            return cpp_type_table[type];
+        if (type_mapping_table.contains(type))
+            return type_mapping_table[type];
         return type;
     };
     if (type.starts_with("map")) {
@@ -119,7 +128,7 @@ static std::unordered_map<std::string, std::string> ENUM_NAME_TABLE;
 
 auto _format_args_to_const_ref(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type) || FRPC_BASE_TYPE_TABLE.contains(type))
             return std::format("{} {}", type, name);
         return std::format("const {}& {}", type, name);
     };
@@ -142,7 +151,7 @@ auto _format_args_type(inja::Arguments& args) {
 
 auto _format_args_name_and_move(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type) || FRPC_BASE_TYPE_TABLE.contains(type))
             return name;
         return std::format("std::move({})", name);
     };
@@ -157,7 +166,7 @@ auto _format_args_name_and_move(inja::Arguments& args) {
 
 auto _format_catch_move(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type) || FRPC_BASE_TYPE_TABLE.contains(type))
             return name;
         return std::format("{} = std::move({})", name, name);
     };
@@ -181,7 +190,7 @@ auto _format_args_name(inja::Arguments& args) {
 
 auto _format_move_or_not(inja::Arguments& args) {
     auto convert = [](const auto& type, const auto& name) {
-        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || ENUM_NAME_TABLE.contains(type) || FRPC_BASE_TYPE_TABLE.contains(type))
             return name;
         return std::format("std::move({})", name);
     };
@@ -239,7 +248,7 @@ auto sort(nlohmann::json json) {
     // auto interface_json = json["interface"];
 
     auto check = [&](const std::string& type) {
-        if (CPP_TYPE_TABLE.contains(type) || type == "std::string")
+        if (CPP_TYPE_TABLE.contains(type) || type == "std::string" || FRPC_BASE_TYPE_TABLE.contains(type))
             return true;
         for (auto& e_json : enum_json) {
             if (e_json["enum_name"].get<std::string>() == type)
@@ -348,7 +357,7 @@ nlohmann::json parseYaml(const std::string& file) {
             for (auto struct_val : config[node_name]["definitions"]) {
                 nlohmann::json j;
                 j["name"] = struct_val.first.as<std::string>();
-                j["type"] = toCppType(struct_val.second["type"].as<std::string>());
+                j["type"] = convertType(struct_val.second["type"].as<std::string>());
                 if (struct_val.second["comment"])
                     j["comment"] = struct_val.second["comment"].as<std::string>();
                 else
@@ -360,7 +369,7 @@ nlohmann::json parseYaml(const std::string& file) {
         if (type == "enum") {
             ENUM_NAME_TABLE.emplace(node_name, node_name);
             data["enum_name"] = node_name;
-            data["value_type"] = toCppType(config[node_name]["value_type"].as<std::string>());
+            data["value_type"] = convertType(config[node_name]["value_type"].as<std::string>());
             nlohmann::json definitions_json;
             for (auto struct_val : config[node_name]["definitions"]) {
                 nlohmann::json j;
@@ -390,7 +399,7 @@ nlohmann::json parseYaml(const std::string& file) {
                     }
                     for (auto val1 : val.second) {
                         in_out["name"] = val1.first.as<std::string>();
-                        in_out["type"] = toCppType(val1.second["type"].as<std::string>());
+                        in_out["type"] = convertType(val1.second["type"].as<std::string>());
                         j[val.first.as<std::string>()].emplace_back(std::move(in_out));
                     }
                 }
@@ -501,6 +510,8 @@ int main(int argc, char** argv) {
                 std::format("{}/include/impl/to_string.h", output), data);
     create_file(std::format("{}/impl/from_string.inja", inja_template_dir),
                 std::format("{}/include/impl/from_string.h", output), data);
+    create_file(std::format("{}/impl/date_time.inja", inja_template_dir),
+                std::format("{}/include/impl/date_time.h", output), data);
     for (auto& enum_json : data["node"]["value"]["enum"]) {
         nlohmann::json ast;
         auto enum_file_name = toSnakeCase(enum_json["enum_name"].get<std::string>());
