@@ -22,7 +22,7 @@ jobs:
 
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
-          xmake-version: v2.8.9
+          xmake-version: v2.9.1
 
       - name: checkout
         uses: actions/checkout@v3
@@ -37,6 +37,7 @@ jobs:
 
       - name: build test
         run: |
-          ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out
-          xmake build -v -y --file=./test_xmake.lua
+          rm -rf out
+          ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out -w ./template/web --auto_sort=1 --debug=0
+          xmake build -y --file=./test_xmake.lua
           xmake install -o . --file=./test_xmake.lua

@@ -12,7 +12,7 @@
 
 namespace frpc {
 
-struct UniChannel final {
+class UniChannel final {
 public:
     UniChannel(const ChannelConfig& config,
                std::function<void(std::vector<zmq::message_t>&)> cb,

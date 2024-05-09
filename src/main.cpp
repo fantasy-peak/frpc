@@ -16,6 +16,20 @@
 #include "cmdline.h"
 #include "utils.h"
 
+inline std::unordered_map<std::string, std::string> CPP_TYPE_TABLE{
+    {"bool", "bool"},
+    {"int8_t", "int8_t"},
+    {"uint8_t", "uint8_t"},
+    {"int16_t", "int16_t"},
+    {"uint16_t", "uint16_t"},
+    {"int32_t", "int32_t"},
+    {"uint32_t", "uint32_t"},
+    {"int64_t", "int64_t"},
+    {"uint64_t", "uint64_t"},
+    {"float", "float"},
+    {"double", "double"},
+};
+
 void copy_directory(const std::filesystem::path& source, const std::filesystem::path& destination) {
     if (!std::filesystem::exists(destination)) {
         std::filesystem::create_directories(destination);
@@ -93,20 +107,6 @@ auto _format_args(inja::Arguments& args) {
     str.pop_back();
     return str;
 }
-
-static std::unordered_map<std::string, std::string> CPP_TYPE_TABLE{
-    {"bool", "bool"},
-    {"int8_t", "int8_t"},
-    {"uint8_t", "uint8_t"},
-    {"int16_t", "int16_t"},
-    {"uint16_t", "uint16_t"},
-    {"int32_t", "int32_t"},
-    {"uint32_t", "uint32_t"},
-    {"int64_t", "int64_t"},
-    {"uint64_t", "uint64_t"},
-    {"float", "float"},
-    {"double", "double"},
-};
 
 auto _is_fundamental(inja::Arguments& args) {
     auto type = args.at(0)->get<std::string>();
@@ -223,6 +223,8 @@ void formatCode(const std::string& file, const std::string& content) {
         memset(buffer, 0x00, sizeof(buffer));
     }
     pclose(pipe);
+    if (result.empty())
+        return;
     std::ofstream write(file);
     if (!write.is_open()) {
         spdlog::error("open {} fail", file);
@@ -232,26 +234,12 @@ void formatCode(const std::string& file, const std::string& content) {
 }
 
 auto sort(nlohmann::json json) {
-    static std::unordered_map<std::string, std::string> base_type{
-        {"bool", "bool"},
-        {"int8_t", "int8_t"},
-        {"uint8_t", "uint8_t"},
-        {"int16_t", "int16_t"},
-        {"uint16_t", "uint16_t"},
-        {"int32_t", "int32_t"},
-        {"uint32_t", "uint32_t"},
-        {"int64_t", "int64_t"},
-        {"uint64_t", "uint64_t"},
-        {"float", "float"},
-        {"double", "double"},
-        {"std::string", "std::string"},
-    };
     auto& enum_json = json["enum"];
     auto& struct_json = json["struct"];
     // auto interface_json = json["interface"];
 
     auto check = [&](const std::string& type) {
-        if (base_type.contains(type))
+        if (CPP_TYPE_TABLE.contains(type) || type == "std::string")
             return true;
         for (auto& e_json : enum_json) {
             if (e_json["enum_name"].get<std::string>() == type)
@@ -274,7 +262,6 @@ auto sort(nlohmann::json json) {
         auto& definitions = j["definitions"];
         for (auto& field : definitions) {
             auto type = field["type"].get<std::string>();
-            boost::trim(type);
             if (check(type))
                 continue;
             if (type.starts_with("std::unordered_map")) {
@@ -334,7 +321,6 @@ nlohmann::json parseYaml(const std::string& file) {
     for (const auto& kv : config) {
         nlohmann::json data;
         auto node_name = kv.first.as<std::string>();
-        boost::trim(node_name);
         if ("property" == node_name) {
             namespace_str = kv.second["namespace"].as<std::string>();
             filename = kv.second["filename"].as<std::string>();
@@ -475,14 +461,12 @@ int main(int argc, char** argv) {
     if (inja_template_dir.back() == '/')
         inja_template_dir.pop_back();
     auto inja_template = std::format("{}/ast.cpp.inja", inja_template_dir);
-    auto coro_template = std::format("{}/impl_coroutine.h.inja", inja_template_dir);
     if (debug)
         spdlog::set_level(spdlog::level::debug);
     spdlog::info("template: {}", inja_template);
     spdlog::info("output: {}", output);
     spdlog::info("lang: {}", lang);
     spdlog::info("auto_sort: {}", auto_sort);
-    spdlog::info("coro template: {}", coro_template);
     spdlog::info("debug: {}", debug);
 
     inja::Environment env = initEnv();
@@ -493,13 +477,12 @@ int main(int argc, char** argv) {
         data["node"]["value"] = sort(std::move(data["node"]["value"]));
     spdlog::debug("{}", data.dump(4));
 
-    std::filesystem::create_directories(std::format("{}/include", output));
     std::filesystem::create_directories(std::format("{}/include/impl", output));
     std::filesystem::create_directories(std::format("{}/include/data", output));
     // create impl coroutine.h
-    auto create_file = [&env](const auto& temp, const auto& filename, auto& ast_json) {
-        auto inja_template = env.parse_template(temp);
-        std::string result = env.render(inja_template, ast_json);
+    auto create_file = [&env](const auto& temp_file, const auto& filename, auto& ast_json) {
+        auto temp = env.parse_template(temp_file);
+        std::string result = env.render(temp, ast_json);
         formatCode(filename, result);
     };
     create_file(std::format("{}/impl/coroutine.h.inja", inja_template_dir),
@@ -533,10 +516,8 @@ int main(int argc, char** argv) {
                     std::format("{}/include/data/{}.h", output, struct_file_name), ast);
     }
     // generate header file
-    auto temp = env.parse_template(inja_template);
-    auto result = env.render(temp, data);
-    auto f = std::format("{}/include/{}", output, data["node"].at("property").at("filename").get<std::string>());
-    formatCode(f, result);
+    auto header_file = data["node"].at("property").at("filename").get<std::string>();
+    create_file(inja_template, std::format("{}/include/{}", output, header_file), data);
 
     if (web_template.empty())
         return 0;
