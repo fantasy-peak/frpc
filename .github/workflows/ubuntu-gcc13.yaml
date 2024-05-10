@@ -18,7 +18,7 @@ jobs:
       - name: Installation
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libglu1-mesa-dev p7zip gobjc g++-13 wget sudo
+          sudo apt-get install -y valgrind libgl1-mesa-dev libglu1-mesa-dev p7zip gobjc g++-13 wget sudo
 
       - uses: xmake-io/github-action-setup-xmake@v1
         with:
@@ -41,3 +41,5 @@ jobs:
           ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out -w ./template/web --auto_sort=1 --debug=0
           xmake build -y --file=./test_xmake.lua
           xmake install -o . --file=./test_xmake.lua
+          valgrind --log-file=a.txt --tool=memcheck --leak-check=full -s  --track-origins=yes ./bin/coro_bi
+          cat a.txt
