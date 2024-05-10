@@ -1,14 +1,15 @@
 namespace fantasy {
 
 enum class TestType : int32_t {
-    EnumOne = 0, // zero
-    EnumTwo = 1, // one
+    EnumOne = 0,  // zero
+    EnumTwo = 1,  // one
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(TestType, {
-                                           {TestType::EnumOne, "EnumOne"},
-                                           {TestType::EnumTwo, "EnumTwo"},
-                                       })
+NLOHMANN_JSON_SERIALIZE_ENUM(TestType,
+                             {
+                                 {TestType::EnumOne, "EnumOne"},
+                                 {TestType::EnumTwo, "EnumTwo"},
+                             })
 
 inline std::string_view toString(const TestType value) {
     switch (value) {
@@ -30,6 +31,6 @@ inline TestType fromString<TestType>(const std::string& value) {
     throw std::bad_cast();
 }
 
-} // namespace fantasy
+}  // namespace fantasy
 
 MSGPACK_ADD_ENUM(fantasy::TestType)

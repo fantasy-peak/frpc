@@ -31,13 +31,12 @@ auto getAwaiterImpl(T&& value) noexcept(
 }
 
 template <typename T>
-auto getAwaiter(T&& value) noexcept(
-    noexcept(getAwaiterImpl(static_cast<T&&>(value))))
-    -> decltype(getAwaiterImpl(static_cast<T&&>(value))) {
+auto getAwaiter(T&& value) noexcept(noexcept(getAwaiterImpl(static_cast<T&&>(
+    value)))) -> decltype(getAwaiterImpl(static_cast<T&&>(value))) {
     return getAwaiterImpl(static_cast<T&&>(value));
 }
 
-} // end namespace internal
+}  // end namespace internal
 
 template <typename T>
 struct await_result {
@@ -49,15 +48,13 @@ template <typename T>
 using await_result_t = typename await_result<T>::type;
 
 template <typename T, typename = std::void_t<>>
-struct is_awaitable : std::false_type {
-};
+struct is_awaitable : std::false_type {};
 
 template <typename T>
 struct is_awaitable<
     T,
     std::void_t<decltype(internal::getAwaiter(std::declval<T>()))>>
-    : std::true_type {
-};
+    : std::true_type {};
 
 template <typename T>
 constexpr bool is_awaitable_v = is_awaitable<T>::value;
@@ -80,9 +77,8 @@ template <typename Promise>
 struct task_awaiter {
     using handle_type = std::coroutine_handle<Promise>;
 
-public:
-    explicit task_awaiter(handle_type coro)
-        : coro_(coro) {
+  public:
+    explicit task_awaiter(handle_type coro) : coro_(coro) {
     }
 
     bool await_ready() noexcept {
@@ -96,14 +92,14 @@ public:
 
     auto await_resume() {
         if constexpr (std::is_void_v<decltype(coro_.promise().result())>) {
-            coro_.promise().result(); // throw exception if any
+            coro_.promise().result();  // throw exception if any
             return;
         } else {
             return std::move(coro_.promise().result());
         }
     }
 
-private:
+  private:
     handle_type coro_;
 };
 
@@ -112,8 +108,7 @@ struct [[nodiscard]] Task {
     struct promise_type;
     using handle_type = std::coroutine_handle<promise_type>;
 
-    Task(handle_type h)
-        : coro_(h) {
+    Task(handle_type h) : coro_(h) {
     }
 
     Task(const Task&) = delete;
@@ -201,8 +196,7 @@ struct [[nodiscard]] Task<void> {
     struct promise_type;
     using handle_type = std::coroutine_handle<promise_type>;
 
-    Task(handle_type handle)
-        : coro_(handle) {
+    Task(handle_type handle) : coro_(handle) {
     }
 
     Task(const Task&) = delete;
@@ -276,8 +270,7 @@ struct AsyncTask {
 
     AsyncTask() = default;
 
-    AsyncTask(handle_type h)
-        : coro_(h) {
+    AsyncTask(handle_type h) : coro_(h) {
     }
 
     AsyncTask(const AsyncTask&) = delete;
@@ -347,7 +340,7 @@ std::function<void()> async_func(Coro&& coro) {
 template <typename T>
     requires(!std::is_reference<T>::value)
 struct CallbackAwaiter {
-public:
+  public:
     using CallbackFunction =
         std::function<void(std::coroutine_handle<>, std::function<void(T)>)>;
 
@@ -360,20 +353,18 @@ public:
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
-        callback_function_(handle, [this](T t) {
-            result_ = std::move(t);
-        });
+        callback_function_(handle, [this](T t) { result_ = std::move(t); });
     }
 
     T await_resume() noexcept {
         return std::move(result_);
     }
 
-private:
+  private:
     CallbackFunction callback_function_;
     T result_;
 };
 
-} // namespace frpc
+}  // namespace frpc
 
-#endif // _FRPC_COROUTINE_H_
+#endif  // _FRPC_COROUTINE_H_

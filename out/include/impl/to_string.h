@@ -9,8 +9,10 @@ inline std::string toString(const std::vector<T>& vec) {
 
     ss << "[";
     for (auto& i : vec) {
-        if constexpr (std::is_fundamental_v<T> || std::is_same_v<T, std::string>) {
-            if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+        if constexpr (std::is_fundamental_v<T> ||
+                      std::is_same_v<T, std::string>) {
+            if constexpr (std::is_same_v<T, uint8_t> ||
+                          std::is_same_v<T, int8_t>)
                 ss << static_cast<int32_t>(i) << " ";
             else
                 ss << i << ",";
@@ -29,16 +31,20 @@ inline std::string toString(const std::unordered_map<K, V>& map) {
 
     ss << "{";
     for (auto& [k, v] : map) {
-        if constexpr (std::is_fundamental_v<K> || std::is_same_v<K, std::string>) {
-            if constexpr (std::is_same_v<K, uint8_t> || std::is_same_v<K, int8_t>)
+        if constexpr (std::is_fundamental_v<K> ||
+                      std::is_same_v<K, std::string>) {
+            if constexpr (std::is_same_v<K, uint8_t> ||
+                          std::is_same_v<K, int8_t>)
                 ss << static_cast<int32_t>(k) << "=";
             else
                 ss << k << "=";
         } else {
             ss << toString(k) << "=";
         }
-        if constexpr (std::is_fundamental_v<V> || std::is_same_v<V, std::string>) {
-            if constexpr (std::is_same_v<V, uint8_t> || std::is_same_v<V, int8_t>)
+        if constexpr (std::is_fundamental_v<V> ||
+                      std::is_same_v<V, std::string>) {
+            if constexpr (std::is_same_v<V, uint8_t> ||
+                          std::is_same_v<V, int8_t>)
                 ss << static_cast<int32_t>(v) << ",";
             else
                 ss << v << ",";
@@ -56,8 +62,10 @@ inline std::string toString(const std::optional<T>& opt) {
     std::ostringstream ss;
 
     if (opt) {
-        if constexpr (std::is_fundamental_v<T> || std::is_same_v<T, std::string>) {
-            if constexpr (std::is_same_v<T, uint8_t> || std::is_same_v<T, int8_t>)
+        if constexpr (std::is_fundamental_v<T> ||
+                      std::is_same_v<T, std::string>) {
+            if constexpr (std::is_same_v<T, uint8_t> ||
+                          std::is_same_v<T, int8_t>)
                 ss << static_cast<int32_t>(opt.value());
             else
                 ss << opt.value();
@@ -71,6 +79,6 @@ inline std::string toString(const std::optional<T>& opt) {
     return ss.str();
 }
 
-} // namespace std
+}  // namespace std
 
-#endif //_FRPC_TO_STRING_H_
+#endif  //_FRPC_TO_STRING_H_

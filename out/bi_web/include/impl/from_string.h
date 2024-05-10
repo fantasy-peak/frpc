@@ -4,8 +4,8 @@
 namespace fantasy {
 
 template <typename T>
-T fromString(const std::string&);
+T fromString(const std::string &);
 
-} // namespace fantasy
+}  // namespace fantasy
 
-#endif //_FANTASY_FROM_STRING_H_
+#endif  //_FANTASY_FROM_STRING_H_

@@ -4,7 +4,7 @@
 namespace fantasy {
 
 struct Info {
-    std::optional<std::string> name; // test Name
+    std::optional<std::string> name;  // test Name
 
     MSGPACK_DEFINE(name)
 };
@@ -13,8 +13,7 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Info, name)
 
 inline std::string toString(const Info& value) {
     std::ostringstream ss;
-    ss << "Info{" << toString(value.name)
-       << "}";
+    ss << "Info{" << toString(value.name) << "}";
     return ss.str();
 }
 
@@ -26,6 +25,6 @@ inline bool operator!=(const Info& lhs, const Info& rhs) {
     return !(lhs == rhs);
 }
 
-} // namespace fantasy
+}  // namespace fantasy
 
-#endif // _FANTASY_INFO_H_
+#endif  // _FANTASY_INFO_H_

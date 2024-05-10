@@ -494,6 +494,12 @@ int main(int argc, char** argv) {
         std::string result = env.render(temp, ast_json);
         formatCode(filename, result);
     };
+    std::filesystem::copy_file(std::format("{}/clang-format.inja", inja_template_dir),
+                               std::format("{}/.clang-format", output),
+                               std::filesystem::copy_options::overwrite_existing);
+    ScopeExit _exit([&] {
+        std::filesystem::remove(std::format("{}/.clang-format", output));
+    });
     create_file(std::format("{}/impl/coroutine.h.inja", inja_template_dir),
                 std::format("{}/include/impl/coroutine.h", output), data);
     create_file(std::format("{}/impl/bi_channel.inja", inja_template_dir),
@@ -539,7 +545,8 @@ int main(int argc, char** argv) {
     std::filesystem::create_directories(std::format("{}/bi_web/config/", output));
     copy_directory(std::format("{}/include", output), std::format("{}/bi_web/include/", output));
 
-    create_file(std::format("{}/bi/src/main.cpp.inja", web_template), std::format("{}/bi_web/src/main.cpp", output), data);
+    create_file(std::format("{}/bi/src/main.cpp.inja", web_template),
+                std::format("{}/bi_web/src/main.cpp", output), data);
     auto bi_temp = env.parse_template(std::format("{}/bi/xmake.lua.inja", web_template));
     env.write(bi_temp, data, std::format("{}/bi_web/xmake.lua", output));
 

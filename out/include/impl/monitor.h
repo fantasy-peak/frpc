@@ -1,8 +1,8 @@
 #ifndef _FRPC_MONITOR_H_
 #define _FRPC_MONITOR_H_
 
-#include <functional>
 #include <memory>
+#include <functional>
 #include <thread>
 
 #include <zmq.hpp>
@@ -43,25 +43,29 @@ inline std::string_view getEventName(uint16_t event_type) {
 }
 
 class Monitor {
-public:
+  public:
     Monitor(zmq::context_t& context, zmq::socket_t& socket)
-        : m_context(context)
-        , m_socket(socket)
-        , m_endpoint(uniqueAddr()) {
+        : m_context(context), m_socket(socket), m_endpoint(uniqueAddr()) {
     }
 
     virtual ~Monitor() {
         stop();
     }
 
-    void start(std::function<void(std::optional<std::tuple<zmq_event_t, std::string>>)> call_back, int events = ZMQ_EVENT_ALL) {
-        m_monitor_socket = std::make_unique<zmq::socket_t>(m_context, zmq::socket_type::pair);
+    void start(
+        std::function<void(std::optional<std::tuple<zmq_event_t, std::string>>)>
+            call_back,
+        int events = ZMQ_EVENT_ALL) {
+        m_monitor_socket =
+            std::make_unique<zmq::socket_t>(m_context, zmq::socket_type::pair);
 
         auto debug = std::getenv("DEBUG_EVENTS");
         if (debug)
             events = std::stoi(debug);
 
-        int rc = zmq_socket_monitor(static_cast<void*>(m_socket), m_endpoint.c_str(), events);
+        int rc = zmq_socket_monitor(static_cast<void*>(m_socket),
+                                    m_endpoint.c_str(),
+                                    events);
         if (rc != 0) {
             throw ::zmq::error_t();
         }
@@ -107,19 +111,23 @@ public:
         const char* data = static_cast<const char*>(event_msg.data());
         std::memcpy(&event.event, data, sizeof(uint16_t));
         std::memcpy(&event.value, data + sizeof(uint16_t), sizeof(int32_t));
-        return std::make_tuple(event, std::string(static_cast<const char*>(addr_msg.data()), addr_msg.size()));
+        return std::make_tuple(event,
+                               std::string(static_cast<const char*>(
+                                               addr_msg.data()),
+                                           addr_msg.size()));
     }
 
-private:
+  private:
     zmq::context_t& m_context;
     zmq::socket_t& m_socket;
     std::string m_endpoint;
     std::unique_ptr<zmq::socket_t> m_monitor_socket;
     std::atomic<bool> m_activate{true};
     std::thread m_thread;
-    std::function<void(std::optional<std::tuple<zmq_event_t, std::string>>)> m_monitor_call_back{nullptr};
+    std::function<void(std::optional<std::tuple<zmq_event_t, std::string>>)>
+        m_monitor_call_back{nullptr};
 };
 
-} // namespace frpc
+}  // namespace frpc
 
-#endif // _FRPC_MONITOR_H_
+#endif  // _FRPC_MONITOR_H_

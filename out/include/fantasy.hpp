@@ -1,22 +1,23 @@
 #ifndef _FANTASY_H_
 #define _FANTASY_H_
 
+#include <variant>
+#include <typeinfo>
+#include <optional>
+#include <unordered_map>
 #include <any>
 #include <mutex>
-#include <optional>
 #include <sstream>
-#include <typeinfo>
-#include <unordered_map>
-#include <variant>
 
-#include <msgpack.hpp>
 #include <nlohmann/json.hpp>
+#include <msgpack.hpp>
 
-#define FRPC_ERROR_FORMAT(message) [](const std::string& info) { \
-    std::stringstream ss;                                        \
-    ss << __FILE__ << ":" << __LINE__ << " " << info;            \
-    return ss.str();                                             \
-}(message)
+#define FRPC_ERROR_FORMAT(message)                        \
+    [](const std::string& info) {                         \
+        std::stringstream ss;                             \
+        ss << __FILE__ << ":" << __LINE__ << " " << info; \
+        return ss.str();                                  \
+    }(message)
 
 // clang-format off
 #include <impl/bi_channel.h>
@@ -43,37 +44,45 @@ enum class HelloWorldClientHelloWorldServer : uint16_t {
     hello_world = 1,
 };
 
-} // namespace fantasy
+}  // namespace fantasy
 
 MSGPACK_ADD_ENUM(fantasy::HelloWorldClientHelloWorldServer)
 
 namespace fantasy {
 
 class HelloWorldClient final {
-public:
+  public:
     HelloWorldClient(const frpc::ChannelConfig& config,
                      std::function<void(std::string)> error)
-        : m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
+        : m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
     }
+
     HelloWorldClient(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      const std::shared_ptr<zmq::socket_t>& socket_ptr,
                      std::function<void(std::string)> error)
-        : m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
+        : m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              context_ptr,
+              socket_ptr,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
     }
+
     HelloWorldClient(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      std::function<void(std::string)> error)
-        : m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
+        : m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              context_ptr,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
     }
 
     void start() {
@@ -88,15 +97,28 @@ public:
         return m_channel->context();
     }
 
-    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb,
+                 int events = ZMQ_EVENT_ALL) {
         return m_channel->monitor(std::move(cb), events);
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
+    void hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
         auto req_id = m_req_id.fetch_add(1);
-        auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
-            req_id,
-            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time));
+        auto snd_bufs =
+            makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
+                req_id,
+                std::make_tuple(std::move(bank_info),
+                                std::move(bank_name),
+                                blance,
+                                std::move(date),
+                                date_time));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -104,14 +126,25 @@ public:
         m_channel->send(std::move(snd_bufs));
     }
 
-    void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time,
-                     std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
-                     const std::chrono::milliseconds& timeout,
-                     std::function<void()> timeout_cb) {
+    void hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
+        const std::chrono::milliseconds& timeout,
+        std::function<void()> timeout_cb) {
         auto req_id = m_req_id.fetch_add(1);
-        auto snd_bufs = makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
-            req_id,
-            std::make_tuple(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time));
+        auto snd_bufs =
+            makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
+                req_id,
+                std::make_tuple(std::move(bank_info),
+                                std::move(bank_name),
+                                blance,
+                                std::move(date),
+                                date_time));
         {
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(cb));
@@ -122,67 +155,201 @@ public:
         });
     }
 #ifdef __cpp_impl_coroutine
-    template <asio::completion_token_for<void(std::string, Info, uint64_t, std::optional<std::string>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, CompletionToken&& token) {
-        return asio::async_initiate<CompletionToken, void(std::string, Info, uint64_t, std::optional<std::string>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time) mutable {
-                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+    template <asio::completion_token_for<
+        void(std::string, Info, uint64_t, std::optional<std::string>)>
+                  CompletionToken>
+    auto hello_world_coro(BankInfo bank_info,
+                          std::string bank_name,
+                          uint64_t blance,
+                          std::optional<std::string> date,
+                          frpc::DateTime date_time,
+                          CompletionToken&& token) {
+        return asio::async_initiate<
+            CompletionToken,
+            void(std::string, Info, uint64_t, std::optional<std::string>)>(
+            [this]<typename Handler>(Handler&& handler,
+                                     BankInfo bank_info,
+                                     std::string bank_name,
+                                     uint64_t blance,
+                                     std::optional<std::string> date,
+                                     frpc::DateTime date_time) mutable {
+                auto handler_ptr =
+                    std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
-                    [handler_ptr = std::move(handler_ptr)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                    std::move(bank_info),
+                    std::move(bank_name),
+                    blance,
+                    std::move(date),
+                    date_time,
+                    [handler_ptr = std::move(handler_ptr)](
+                        std::string reply,
+                        Info info,
+                        uint64_t count,
+                        std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
-                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
-                            (*handler_ptr)(std::move(reply), std::move(info), count, std::move(date));
-                        });
+                        asio::post(ex,
+                                   [reply = std::move(reply),
+                                    info = std::move(info),
+                                    count,
+                                    date = std::move(date),
+                                    handler_ptr = std::move(
+                                        handler_ptr)]() mutable -> void {
+                                       (*handler_ptr)(std::move(reply),
+                                                      std::move(info),
+                                                      count,
+                                                      std::move(date));
+                                   });
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time);
+            std::move(bank_info),
+            std::move(bank_name),
+            blance,
+            std::move(date),
+            date_time);
     }
 
-    template <asio::completion_token_for<void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)> CompletionToken>
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
-        return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>)>(
-            [this]<typename Handler>(Handler&& handler, BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const auto& timeout) mutable {
-                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+    template <asio::completion_token_for<void(
+        std::optional<std::tuple<std::string,
+                                 Info,
+                                 uint64_t,
+                                 std::optional<std::string>>>)> CompletionToken>
+    auto hello_world_coro(BankInfo bank_info,
+                          std::string bank_name,
+                          uint64_t blance,
+                          std::optional<std::string> date,
+                          frpc::DateTime date_time,
+                          const std::chrono::milliseconds& timeout,
+                          CompletionToken&& token) {
+        return asio::async_initiate<
+            CompletionToken,
+            void(std::optional<std::tuple<std::string,
+                                          Info,
+                                          uint64_t,
+                                          std::optional<std::string>>>)>(
+            [this]<typename Handler>(Handler&& handler,
+                                     BankInfo bank_info,
+                                     std::string bank_name,
+                                     uint64_t blance,
+                                     std::optional<std::string> date,
+                                     frpc::DateTime date_time,
+                                     const auto& timeout) mutable {
+                auto handler_ptr =
+                    std::make_shared<Handler>(std::move(handler));
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
-                    [handler_ptr](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
+                    std::move(bank_info),
+                    std::move(bank_name),
+                    blance,
+                    std::move(date),
+                    date_time,
+                    [handler_ptr](std::string reply,
+                                  Info info,
+                                  uint64_t count,
+                                  std::optional<std::string> date) mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
-                        asio::post(ex, [reply = std::move(reply), info = std::move(info), count, date = std::move(date), handler_ptr = std::move(handler_ptr)]() mutable -> void {
-                            (*handler_ptr)(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
-                        });
+                        asio::post(ex,
+                                   [reply = std::move(reply),
+                                    info = std::move(info),
+                                    count,
+                                    date = std::move(date),
+                                    handler_ptr = std::move(
+                                        handler_ptr)]() mutable -> void {
+                                       (*handler_ptr)(
+                                           std::make_tuple(std::move(reply),
+                                                           std::move(info),
+                                                           count,
+                                                           std::move(date)));
+                                   });
                     },
                     timeout,
                     [handler_ptr]() mutable {
                         auto ex = asio::get_associated_executor(*handler_ptr);
-                        asio::post(ex, [=, handler_ptr = std::move(handler_ptr)]() mutable -> void {
-                            (*handler_ptr)(std::nullopt);
-                        });
+                        asio::post(ex,
+                                   [=,
+                                    handler_ptr = std::move(
+                                        handler_ptr)]() mutable -> void {
+                                       (*handler_ptr)(std::nullopt);
+                                   });
                     });
             },
             token,
-            std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, timeout);
+            std::move(bank_info),
+            std::move(bank_name),
+            blance,
+            std::move(date),
+            date_time,
+            timeout);
     }
 
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time) {
-        return frpc::CallbackAwaiter<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>{
-            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), date_time](std::coroutine_handle<> handle, auto set_resume_value) mutable {
-                this->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
-                                  [handle, set_resume_value = std::move(set_resume_value)](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
-                                      set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
-                                      handle.resume();
-                                  });
+    auto hello_world_coro(BankInfo bank_info,
+                          std::string bank_name,
+                          uint64_t blance,
+                          std::optional<std::string> date,
+                          frpc::DateTime date_time) {
+        return frpc::CallbackAwaiter<
+            std::
+                tuple<std::string, Info, uint64_t, std::optional<std::string>>>{
+            [this,
+             bank_info = std::move(bank_info),
+             bank_name = std::move(bank_name),
+             blance,
+             date = std::move(date),
+             date_time](std::coroutine_handle<> handle,
+                        auto set_resume_value) mutable {
+                this->hello_world(
+                    std::move(bank_info),
+                    std::move(bank_name),
+                    blance,
+                    std::move(date),
+                    date_time,
+                    [handle, set_resume_value = std::move(set_resume_value)](
+                        std::string reply,
+                        Info info,
+                        uint64_t count,
+                        std::optional<std::string> date) mutable {
+                        set_resume_value(std::make_tuple(std::move(reply),
+                                                         std::move(info),
+                                                         count,
+                                                         std::move(date)));
+                        handle.resume();
+                    });
             }};
     }
 
-    auto hello_world_coro(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, const std::chrono::milliseconds& timeout) {
-        return frpc::CallbackAwaiter<std::optional<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>>{
-            [this, bank_info = std::move(bank_info), bank_name = std::move(bank_name), blance, date = std::move(date), date_time, &timeout](std::coroutine_handle<> handle, auto set_resume_value) mutable {
+    auto hello_world_coro(BankInfo bank_info,
+                          std::string bank_name,
+                          uint64_t blance,
+                          std::optional<std::string> date,
+                          frpc::DateTime date_time,
+                          const std::chrono::milliseconds& timeout) {
+        return frpc::CallbackAwaiter<
+            std::optional<std::tuple<std::string,
+                                     Info,
+                                     uint64_t,
+                                     std::optional<std::string>>>>{
+            [this,
+             bank_info = std::move(bank_info),
+             bank_name = std::move(bank_name),
+             blance,
+             date = std::move(date),
+             date_time,
+             &timeout](std::coroutine_handle<> handle,
+                       auto set_resume_value) mutable {
                 this->hello_world(
-                    std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time,
-                    [handle, set_resume_value](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
-                        set_resume_value(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
+                    std::move(bank_info),
+                    std::move(bank_name),
+                    blance,
+                    std::move(date),
+                    date_time,
+                    [handle, set_resume_value](
+                        std::string reply,
+                        Info info,
+                        uint64_t count,
+                        std::optional<std::string> date) mutable {
+                        set_resume_value(std::make_tuple(std::move(reply),
+                                                         std::move(info),
+                                                         count,
+                                                         std::move(date)));
                         handle.resume();
                     },
                     timeout,
@@ -195,24 +362,32 @@ public:
 
 #endif
 
-    static auto create(frpc::ChannelConfig& config, std::function<void(std::string)> error) {
+    static auto create(frpc::ChannelConfig& config,
+                       std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<HelloWorldClient>(config, std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
                        std::function<void(std::string)> error) {
-        return std::make_unique<HelloWorldClient>(config, context_ptr, socket_ptr, std::move(error));
+        return std::make_unique<HelloWorldClient>(config,
+                                                  context_ptr,
+                                                  socket_ptr,
+                                                  std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
-        return std::make_unique<HelloWorldClient>(config, context_ptr, std::move(error));
+        return std::make_unique<HelloWorldClient>(config,
+                                                  context_ptr,
+                                                  std::move(error));
     }
 
-private:
+  private:
     template <HelloWorldClientHelloWorldServer type, typename T>
     std::vector<zmq::message_t> makeRequestPacket(uint64_t req_id, T&& t) {
         auto header = std::make_tuple(req_id, type);
@@ -242,8 +417,11 @@ private:
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
-            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
+            using FrpcHeader =
+                std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+            auto [req_id, req_type] =
+                frpc::unpack<FrpcHeader>(recv_bufs[0].data(),
+                                         recv_bufs[0].size());
             std::unique_lock lk(m_mtx);
             if (m_cb.find(req_id) == m_cb.end())
                 return;
@@ -253,9 +431,21 @@ private:
             lk.unlock();
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
-                    auto [reply, info, count, date] = frpc::unpack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(recv_bufs[1].data(), recv_bufs[1].size());
-                    auto callback = std::any_cast<std::function<void(std::string, Info, uint64_t, std::optional<std::string>)>>(cb);
-                    callback(std::move(reply), std::move(info), count, std::move(date));
+                    auto [reply, info, count, date] =
+                        frpc::unpack<std::tuple<std::string,
+                                                Info,
+                                                uint64_t,
+                                                std::optional<std::string>>>(
+                            recv_bufs[1].data(), recv_bufs[1].size());
+                    auto callback = std::any_cast<
+                        std::function<void(std::string,
+                                           Info,
+                                           uint64_t,
+                                           std::optional<std::string>)>>(cb);
+                    callback(std::move(reply),
+                             std::move(info),
+                             count,
+                             std::move(date));
                     break;
                 }
                 default:
@@ -279,71 +469,129 @@ private:
 };
 
 struct HelloWorldServerHandler {
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)>
+            cb) noexcept = 0;
 };
 
 struct AsioCoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual asio::awaitable<void> hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)>
+            cb) noexcept = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)>
+            cb) noexcept = 0;
 #endif
 };
 
 struct FrpcCoroHelloWorldServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual frpc::Task<void> hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual frpc::Task<void> hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)>
+            cb) noexcept = 0;
 #else
-    virtual void hello_world(BankInfo bank_info, std::string bank_name, uint64_t blance, std::optional<std::string> date, frpc::DateTime date_time, std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> cb) noexcept = 0;
+    virtual void hello_world(
+        BankInfo bank_info,
+        std::string bank_name,
+        uint64_t blance,
+        std::optional<std::string> date,
+        frpc::DateTime date_time,
+        std::function<
+            void(std::string, Info, uint64_t, std::optional<std::string>)>
+            cb) noexcept = 0;
 #endif
 };
 
 class HelloWorldServer final {
-public:
-    using VariantHandler = std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>, std::shared_ptr<AsioCoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>>;
+  public:
+    using VariantHandler =
+        std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>,
+                     std::shared_ptr<AsioCoroHelloWorldServerHandler>,
+                     std::shared_ptr<HelloWorldServerHandler>>;
 
     HelloWorldServer(const frpc::ChannelConfig& config,
                      VariantHandler handler,
                      std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::BiChannel>(config, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(
+            config,
+            error,
+            [this](std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
     }
+
     HelloWorldServer(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      const std::shared_ptr<zmq::socket_t>& socket_ptr,
                      VariantHandler handler,
                      std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(
+            config,
+            context_ptr,
+            socket_ptr,
+            error,
+            [this](std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
     }
+
     HelloWorldServer(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      VariantHandler handler,
                      std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](std::vector<zmq::message_t>& recv_bufs) mutable {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(
+            config,
+            context_ptr,
+            error,
+            [this](std::vector<zmq::message_t>& recv_bufs) mutable {
+                dispatch(recv_bufs);
+            });
     }
+
     ~HelloWorldServer() {
 #ifdef __cpp_impl_coroutine
         if (m_pool_ptr)
@@ -359,7 +607,8 @@ public:
         return m_channel->context();
     }
 
-    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb,
+                 int events = ZMQ_EVENT_ALL) {
         return m_channel->monitor(std::move(cb), events);
     }
 
@@ -372,74 +621,158 @@ public:
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
-        return std::make_unique<HelloWorldServer>(config, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldServer>(config,
+                                                  std::move(handler),
+                                                  std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error) {
         config.bind = true;
-        return std::make_unique<HelloWorldServer>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldServer>(config,
+                                                  context_ptr,
+                                                  socket_ptr,
+                                                  std::move(handler),
+                                                  std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
-        return std::make_unique<HelloWorldServer>(config, context_ptr, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldServer>(config,
+                                                  context_ptr,
+                                                  std::move(handler),
+                                                  std::move(error));
     }
 
-private:
+  private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 3) {
             m_error(FRPC_ERROR_FORMAT("BiChannel recv illegal request packet"));
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
-            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
+            using FrpcHeader =
+                std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+            auto [req_id, req_type] =
+                frpc::unpack<FrpcHeader>(recv_bufs[1].data(),
+                                         recv_bufs[1].size());
             switch (req_type) {
                 case HelloWorldClientHelloWorldServer::hello_world: {
-                    auto tp = frpc::unpack<std::tuple<BankInfo, std::string, uint64_t, std::optional<std::string>, frpc::DateTime>>(recv_bufs[2].data(), recv_bufs[2].size());
-                    auto recv_bufs_ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
+                    auto tp =
+                        frpc::unpack<std::tuple<BankInfo,
+                                                std::string,
+                                                uint64_t,
+                                                std::optional<std::string>,
+                                                frpc::DateTime>>(
+                            recv_bufs[2].data(), recv_bufs[2].size());
+                    auto recv_bufs_ptr =
+                        std::make_shared<std::vector<zmq::message_t>>(
+                            std::move(recv_bufs));
                     // Don't call it in multiple threads
-                    std::function<void(std::string, Info, uint64_t, std::optional<std::string>)> out = [done = false, recv_bufs_ptr = std::move(recv_bufs_ptr), this](std::string reply, Info info, uint64_t count, std::optional<std::string> date) mutable {
-                        if (done)
-                            return;
-                        done = true;
-                        auto& snd_bufs = *recv_bufs_ptr;
-                        auto packet = frpc::pack<std::tuple<std::string, Info, uint64_t, std::optional<std::string>>>(std::make_tuple(std::move(reply), std::move(info), count, std::move(date)));
-                        snd_bufs[2] = zmq::message_t(packet.data(), packet.size());
-                        m_channel->send(std::move(snd_bufs));
-                    };
-                    std::visit([&](auto&& arg) mutable {
-                        auto& [bank_info, bank_name, blance, date, date_time] = tp;
-                        using T = std::decay_t<decltype(arg)>;
-                        if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldServerHandler>>) {
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
-                        } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldServerHandler>>) {
+                    std::function<void(std::string,
+                                       Info,
+                                       uint64_t,
+                                       std::optional<std::string>)>
+                        out = [done = false,
+                               recv_bufs_ptr = std::move(recv_bufs_ptr),
+                               this](std::string reply,
+                                     Info info,
+                                     uint64_t count,
+                                     std::optional<std::string> date) mutable {
+                            if (done)
+                                return;
+                            done = true;
+                            auto& snd_bufs = *recv_bufs_ptr;
+                            auto packet = frpc::pack<
+                                std::tuple<std::string,
+                                           Info,
+                                           uint64_t,
+                                           std::optional<std::string>>>(
+                                std::make_tuple(std::move(reply),
+                                                std::move(info),
+                                                count,
+                                                std::move(date)));
+                            snd_bufs[2] =
+                                zmq::message_t(packet.data(), packet.size());
+                            m_channel->send(std::move(snd_bufs));
+                        };
+                    std::visit(
+                        [&](auto&& arg) mutable {
+                            auto& [bank_info,
+                                   bank_name,
+                                   blance,
+                                   date,
+                                   date_time] = tp;
+                            using T = std::decay_t<decltype(arg)>;
+                            if constexpr (std::is_same_v<
+                                              T,
+                                              std::shared_ptr<
+                                                  HelloWorldServerHandler>>) {
+                                arg->hello_world(std::move(bank_info),
+                                                 std::move(bank_name),
+                                                 blance,
+                                                 std::move(date),
+                                                 date_time,
+                                                 std::move(out));
+                            } else if constexpr (
+                                std::is_same_v<
+                                    T,
+                                    std::shared_ptr<
+                                        AsioCoroHelloWorldServerHandler>>) {
 #ifdef __cpp_impl_coroutine
-                            asio::co_spawn(
-                                m_pool_ptr->getIoContext(),
-                                arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out)),
-                                asio::detached);
+                                asio::co_spawn(
+                                    m_pool_ptr->getIoContext(),
+                                    arg->hello_world(std::move(bank_info),
+                                                     std::move(bank_name),
+                                                     blance,
+                                                     std::move(date),
+                                                     date_time,
+                                                     std::move(out)),
+                                    asio::detached);
 #else
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
+                                arg->hello_world(std::move(bank_info),
+                                                 std::move(bank_name),
+                                                 blance,
+                                                 std::move(date),
+                                                 date_time,
+                                                 std::move(out));
 #endif
-                        } else {
+                            } else {
 #ifdef __cpp_impl_coroutine
-                            [](auto& arg, auto tp, auto out) mutable -> frpc::AsyncTask {
-                                auto& [bank_info, bank_name, blance, date, date_time] = tp;
-                                co_await arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
-                            }(arg, std::move(tp), std::move(out));
+                                [](auto& arg,
+                                   auto tp,
+                                   auto out) mutable -> frpc::AsyncTask {
+                                    auto& [bank_info,
+                                           bank_name,
+                                           blance,
+                                           date,
+                                           date_time] = tp;
+                                    co_await arg->hello_world(
+                                        std::move(bank_info),
+                                        std::move(bank_name),
+                                        blance,
+                                        std::move(date),
+                                        date_time,
+                                        std::move(out));
+                                }(arg, std::move(tp), std::move(out));
 #else
-                            arg->hello_world(std::move(bank_info), std::move(bank_name), blance, std::move(date), date_time, std::move(out));
+                                arg->hello_world(std::move(bank_info),
+                                                 std::move(bank_name),
+                                                 blance,
+                                                 std::move(date),
+                                                 date_time,
+                                                 std::move(out));
 #endif
-                        }
-                    },
-                               m_handler);
+                            }
+                        },
+                        m_handler);
                     break;
                 }
                 default:
@@ -454,7 +787,10 @@ private:
         }
     }
 
-    std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>, std::shared_ptr<AsioCoroHelloWorldServerHandler>, std::shared_ptr<HelloWorldServerHandler>> m_handler;
+    std::variant<std::shared_ptr<FrpcCoroHelloWorldServerHandler>,
+                 std::shared_ptr<AsioCoroHelloWorldServerHandler>,
+                 std::shared_ptr<HelloWorldServerHandler>>
+        m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::mutex m_mtx;
@@ -463,7 +799,7 @@ private:
 #endif
 };
 
-} // namespace fantasy
+}  // namespace fantasy
 
 namespace fantasy {
 
@@ -472,7 +808,8 @@ enum class HelloWorldSenderHelloWorldReceiver : uint16_t {
     notice = 2,
 };
 
-inline std::string_view toString(const HelloWorldSenderHelloWorldReceiver value) {
+inline std::string_view toString(
+    const HelloWorldSenderHelloWorldReceiver value) {
     switch (value) {
         case HelloWorldSenderHelloWorldReceiver::hello_world:
             return "hello_world";
@@ -484,7 +821,8 @@ inline std::string_view toString(const HelloWorldSenderHelloWorldReceiver value)
 }
 
 template <>
-inline HelloWorldSenderHelloWorldReceiver fromString<HelloWorldSenderHelloWorldReceiver>(const std::string& value) {
+inline HelloWorldSenderHelloWorldReceiver fromString<
+    HelloWorldSenderHelloWorldReceiver>(const std::string& value) {
     if (value == "hello_world")
         return HelloWorldSenderHelloWorldReceiver::hello_world;
     if (value == "notice")
@@ -492,7 +830,7 @@ inline HelloWorldSenderHelloWorldReceiver fromString<HelloWorldSenderHelloWorldR
     throw std::bad_cast();
 }
 
-} // namespace fantasy
+}  // namespace fantasy
 
 MSGPACK_ADD_ENUM(fantasy::HelloWorldSenderHelloWorldReceiver)
 
@@ -506,7 +844,8 @@ struct HelloWorldReceiverHandler {
 struct AsioCoroHelloWorldReceiverHandler {
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(std::string in) noexcept = 0;
-    virtual asio::awaitable<void> notice(int32_t in, std::string info) noexcept = 0;
+    virtual asio::awaitable<void> notice(int32_t in,
+                                         std::string info) noexcept = 0;
 #else
     virtual void hello_world(std::string in) noexcept = 0;
     virtual void notice(int32_t in, std::string info) noexcept = 0;
@@ -524,53 +863,61 @@ struct FrpcCoroHelloWorldReceiverHandler {
 };
 
 class HelloWorldReceiver final {
-public:
-    using VariantHandler = std::variant<std::shared_ptr<FrpcCoroHelloWorldReceiverHandler>, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>, std::shared_ptr<HelloWorldReceiverHandler>>;
+  public:
+    using VariantHandler =
+        std::variant<std::shared_ptr<FrpcCoroHelloWorldReceiverHandler>,
+                     std::shared_ptr<AsioCoroHelloWorldReceiverHandler>,
+                     std::shared_ptr<HelloWorldReceiverHandler>>;
+
     HelloWorldReceiver(const frpc::ChannelConfig& config,
                        VariantHandler handler,
                        std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::UniChannel>(config, [this](auto& recv) mutable {
-            dispatch(recv);
-        },
-                                                       error);
+        m_channel = std::make_unique<frpc::UniChannel>(
+            config, [this](auto& recv) mutable { dispatch(recv); }, error);
     }
+
     HelloWorldReceiver(const frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::UniChannel>(config, context_ptr, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        },
-                                                       error);
+        m_channel = std::make_unique<frpc::UniChannel>(
+            config,
+            context_ptr,
+            [this](auto& recv_msgs) mutable { dispatch(recv_msgs); },
+            error);
     }
+
     HelloWorldReceiver(const frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error)
-        : m_handler(std::move(handler))
-        , m_error(error) {
+        : m_handler(std::move(handler)), m_error(error) {
 #ifdef __cpp_impl_coroutine
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
 #endif
-        m_channel = std::make_unique<frpc::UniChannel>(config, context_ptr, socket_ptr, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        },
-                                                       error);
+        m_channel = std::make_unique<frpc::UniChannel>(
+            config,
+            context_ptr,
+            socket_ptr,
+            [this](auto& recv_msgs) mutable { dispatch(recv_msgs); },
+            error);
     }
+
     ~HelloWorldReceiver() {
 #ifdef __cpp_impl_coroutine
         if (m_pool_ptr)
@@ -593,67 +940,91 @@ public:
     static auto create(frpc::ChannelConfig& config,
                        VariantHandler handler,
                        std::function<void(std::string)> error) {
-        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+        if ((config.socktype != zmq::socket_type::sub) &&
+            config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
         if (config.socktype == zmq::socket_type::sub)
             config.bind = false;
-        return std::make_unique<HelloWorldReceiver>(config, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldReceiver>(config,
+                                                    std::move(handler),
+                                                    std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error) {
-        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+        if ((config.socktype != zmq::socket_type::sub) &&
+            config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
         if (config.socktype == zmq::socket_type::sub)
             config.bind = false;
-        return std::make_unique<HelloWorldReceiver>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldReceiver>(config,
+                                                    context_ptr,
+                                                    socket_ptr,
+                                                    std::move(handler),
+                                                    std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        VariantHandler handler,
                        std::function<void(std::string)> error) {
-        if ((config.socktype != zmq::socket_type::sub) && config.socktype != zmq::socket_type::pull)
+        if ((config.socktype != zmq::socket_type::sub) &&
+            config.socktype != zmq::socket_type::pull)
             config.socktype = zmq::socket_type::sub;
         if (config.socktype == zmq::socket_type::sub)
             config.bind = false;
-        return std::make_unique<HelloWorldReceiver>(config, context_ptr, std::move(handler), std::move(error));
+        return std::make_unique<HelloWorldReceiver>(config,
+                                                    context_ptr,
+                                                    std::move(handler),
+                                                    std::move(error));
     }
 
-    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb,
+                 int events = ZMQ_EVENT_ALL) {
         return m_channel->monitor(std::move(cb), events);
     }
 
-private:
+  private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
             m_error(FRPC_ERROR_FORMAT("Illegal response packet"));
             return;
         }
         try {
-            auto req_type = frpc::unpack<HelloWorldSenderHelloWorldReceiver>(recv_bufs[0].data(), recv_bufs[0].size());
+            auto req_type = frpc::unpack<HelloWorldSenderHelloWorldReceiver>(
+                recv_bufs[0].data(), recv_bufs[0].size());
             switch (req_type) {
                 case HelloWorldSenderHelloWorldReceiver::hello_world: {
-                    auto tp = frpc::unpack<std::tuple<std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto tp = frpc::unpack<std::tuple<std::string>>(
+                        recv_bufs[1].data(), recv_bufs[1].size());
                     std::visit(
                         [&](auto&& arg) {
                             auto& [in] = tp;
                             using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
+                            if constexpr (std::is_same_v<
+                                              T,
+                                              std::shared_ptr<
+                                                  HelloWorldReceiverHandler>>) {
                                 arg->hello_world(std::move(in));
-                            } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>>) {
+                            } else if constexpr (
+                                std::is_same_v<
+                                    T,
+                                    std::shared_ptr<
+                                        AsioCoroHelloWorldReceiverHandler>>) {
 #ifdef __cpp_impl_coroutine
-                                asio::co_spawn(
-                                    m_pool_ptr->getIoContext(),
-                                    arg->hello_world(std::move(in)),
-                                    asio::detached);
+                                asio::co_spawn(m_pool_ptr->getIoContext(),
+                                               arg->hello_world(std::move(in)),
+                                               asio::detached);
 #else
                                 arg->hello_world(std::move(in));
 #endif
                             } else {
 #ifdef __cpp_impl_coroutine
-                                [](auto& arg, auto tp) mutable -> frpc::AsyncTask {
+                                [](auto& arg,
+                                   auto tp) mutable -> frpc::AsyncTask {
                                     auto& [in] = tp;
                                     co_await arg->hello_world(std::move(in));
                                 }(arg, std::move(tp));
@@ -666,25 +1037,33 @@ private:
                     break;
                 }
                 case HelloWorldSenderHelloWorldReceiver::notice: {
-                    auto tp = frpc::unpack<std::tuple<int32_t, std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto tp = frpc::unpack<std::tuple<int32_t, std::string>>(
+                        recv_bufs[1].data(), recv_bufs[1].size());
                     std::visit(
                         [&](auto&& arg) {
                             auto& [in, info] = tp;
                             using T = std::decay_t<decltype(arg)>;
-                            if constexpr (std::is_same_v<T, std::shared_ptr<HelloWorldReceiverHandler>>) {
+                            if constexpr (std::is_same_v<
+                                              T,
+                                              std::shared_ptr<
+                                                  HelloWorldReceiverHandler>>) {
                                 arg->notice(in, std::move(info));
-                            } else if constexpr (std::is_same_v<T, std::shared_ptr<AsioCoroHelloWorldReceiverHandler>>) {
+                            } else if constexpr (
+                                std::is_same_v<
+                                    T,
+                                    std::shared_ptr<
+                                        AsioCoroHelloWorldReceiverHandler>>) {
 #ifdef __cpp_impl_coroutine
-                                asio::co_spawn(
-                                    m_pool_ptr->getIoContext(),
-                                    arg->notice(in, std::move(info)),
-                                    asio::detached);
+                                asio::co_spawn(m_pool_ptr->getIoContext(),
+                                               arg->notice(in, std::move(info)),
+                                               asio::detached);
 #else
                                 arg->notice(in, std::move(info));
 #endif
                             } else {
 #ifdef __cpp_impl_coroutine
-                                [](auto& arg, auto tp) mutable -> frpc::AsyncTask {
+                                [](auto& arg,
+                                   auto tp) mutable -> frpc::AsyncTask {
                                     auto& [in, info] = tp;
                                     co_await arg->notice(in, std::move(info));
                                 }(arg, std::move(tp));
@@ -715,23 +1094,26 @@ private:
 };
 
 class HelloWorldSender final {
-public:
+  public:
     HelloWorldSender(const frpc::ChannelConfig& config)
-        : m_context(std::make_shared<zmq::context_t>(config.io_threads))
-        , m_socket(std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
+        : m_context(std::make_shared<zmq::context_t>(config.io_threads)),
+          m_socket(
+              std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
         init_socket(config);
     }
+
     HelloWorldSender(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context)
-        : m_context(context)
-        , m_socket(std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
+        : m_context(context),
+          m_socket(
+              std::make_shared<zmq::socket_t>(*m_context, config.socktype)) {
         init_socket(config);
     }
+
     HelloWorldSender(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context,
                      const std::shared_ptr<zmq::socket_t>& socket)
-        : m_context(context)
-        , m_socket(socket) {
+        : m_context(context), m_socket(socket) {
         init_socket(config);
     }
 
@@ -739,24 +1121,31 @@ public:
     }
 
     static auto create(frpc::ChannelConfig& config) {
-        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+        if ((config.socktype != zmq::socket_type::pub) &&
+            config.socktype != zmq::socket_type::push)
             config.socktype = zmq::socket_type::pub;
         if (config.socktype == zmq::socket_type::pub)
             config.bind = true;
         return std::make_unique<HelloWorldSender>(config);
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr) {
-        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+        if ((config.socktype != zmq::socket_type::pub) &&
+            config.socktype != zmq::socket_type::push)
             config.socktype = zmq::socket_type::pub;
         if (config.socktype == zmq::socket_type::pub)
             config.bind = true;
-        return std::make_unique<HelloWorldSender>(config, context_ptr, socket_ptr);
+        return std::make_unique<HelloWorldSender>(config,
+                                                  context_ptr,
+                                                  socket_ptr);
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr) {
-        if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)
+        if ((config.socktype != zmq::socket_type::pub) &&
+            config.socktype != zmq::socket_type::push)
             config.socktype = zmq::socket_type::pub;
         if (config.socktype == zmq::socket_type::pub)
             config.bind = true;
@@ -764,20 +1153,27 @@ public:
     }
 
     auto hello_world(std::string in) {
-        static auto pub_topic = frpc::pack<HelloWorldSenderHelloWorldReceiver>(HelloWorldSenderHelloWorldReceiver::hello_world);
-        auto str = frpc::pack<std::tuple<std::string>>(std::make_tuple(std::move(in)));
+        static auto pub_topic = frpc::pack<HelloWorldSenderHelloWorldReceiver>(
+            HelloWorldSenderHelloWorldReceiver::hello_world);
+        auto str =
+            frpc::pack<std::tuple<std::string>>(std::make_tuple(std::move(in)));
         std::vector<zmq::message_t> snd_bufs;
-        snd_bufs.emplace_back(zmq::message_t(pub_topic.data(), pub_topic.size()));
+        snd_bufs.emplace_back(
+            zmq::message_t(pub_topic.data(), pub_topic.size()));
         snd_bufs.emplace_back(zmq::message_t(str.data(), str.size()));
         std::lock_guard lk(m_mtx);
         auto ret = zmq::send_multipart(*m_socket, std::move(snd_bufs));
         return ret;
     }
+
     auto notice(int32_t in, std::string info) {
-        static auto pub_topic = frpc::pack<HelloWorldSenderHelloWorldReceiver>(HelloWorldSenderHelloWorldReceiver::notice);
-        auto str = frpc::pack<std::tuple<int32_t, std::string>>(std::make_tuple(in, std::move(info)));
+        static auto pub_topic = frpc::pack<HelloWorldSenderHelloWorldReceiver>(
+            HelloWorldSenderHelloWorldReceiver::notice);
+        auto str = frpc::pack<std::tuple<int32_t, std::string>>(
+            std::make_tuple(in, std::move(info)));
         std::vector<zmq::message_t> snd_bufs;
-        snd_bufs.emplace_back(zmq::message_t(pub_topic.data(), pub_topic.size()));
+        snd_bufs.emplace_back(
+            zmq::message_t(pub_topic.data(), pub_topic.size()));
         snd_bufs.emplace_back(zmq::message_t(str.data(), str.size()));
         std::lock_guard lk(m_mtx);
         auto ret = zmq::send_multipart(*m_socket, std::move(snd_bufs));
@@ -792,7 +1188,7 @@ public:
         return m_context;
     }
 
-private:
+  private:
     void init_socket(const frpc::ChannelConfig& config) {
         m_socket->set(zmq::sockopt::sndhwm, config.sendhwm);
         m_socket->set(zmq::sockopt::rcvhwm, config.recvhwm);
@@ -801,9 +1197,12 @@ private:
         m_socket->set(zmq::sockopt::linger, config.linger);
         if (config.tcp_keepalive) {
             m_socket->set(zmq::sockopt::tcp_keepalive, 1);
-            m_socket->set(zmq::sockopt::tcp_keepalive_idle, config.tcp_keepalive_idle);
-            m_socket->set(zmq::sockopt::tcp_keepalive_cnt, config.tcp_keepalive_cnt);
-            m_socket->set(zmq::sockopt::tcp_keepalive_intvl, config.tcp_keepalive_intvl);
+            m_socket->set(zmq::sockopt::tcp_keepalive_idle,
+                          config.tcp_keepalive_idle);
+            m_socket->set(zmq::sockopt::tcp_keepalive_cnt,
+                          config.tcp_keepalive_cnt);
+            m_socket->set(zmq::sockopt::tcp_keepalive_intvl,
+                          config.tcp_keepalive_intvl);
         }
         if (config.bind)
             m_socket->bind(config.addr);
@@ -816,7 +1215,7 @@ private:
     std::mutex m_mtx;
 };
 
-} // namespace fantasy
+}  // namespace fantasy
 
 namespace fantasy {
 
@@ -824,7 +1223,7 @@ enum class StreamClientStreamServer : uint16_t {
     hello_world = 1,
 };
 
-} // namespace fantasy
+}  // namespace fantasy
 
 MSGPACK_ADD_ENUM(fantasy::StreamClientStreamServer)
 
@@ -833,40 +1232,52 @@ namespace fantasy {
 #ifdef __cpp_impl_coroutine
 
 class StreamClient final {
-public:
+  public:
     StreamClient(const frpc::ChannelConfig& config,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config),
+          m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
+
     StreamClient(const frpc::ChannelConfig& config,
                  const std::shared_ptr<zmq::context_t>& context_ptr,
                  const std::shared_ptr<zmq::socket_t>& socket_ptr,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config),
+          m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              context_ptr,
+              socket_ptr,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
+
     StreamClient(const frpc::ChannelConfig& config,
                  const std::shared_ptr<zmq::context_t>& context_ptr,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable {
-            dispatch(recv_msgs);
-        }))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config),
+          m_channel(std::make_unique<frpc::BiChannel>(
+              config,
+              context_ptr,
+              error,
+              [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
+          m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
     }
+
     ~StreamClient() {
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -886,68 +1297,88 @@ public:
 
     auto hello_world() {
         auto req_id = m_req_id.fetch_add(1);
-        auto header = std::make_tuple(req_id, StreamClientStreamServer::hello_world);
+        auto header =
+            std::make_tuple(req_id, StreamClientStreamServer::hello_world);
 
         auto buffer = frpc::pack<decltype(header)>(header);
         std::string header_str((char*)buffer.data(), buffer.size());
 
         auto stream_ptr = std::make_shared<frpc::Stream<void(std::string)>>(
-            [this, header_str = std::move(header_str)](std::string bank_name) mutable {
-                auto packet = frpc::pack<std::tuple<std::string>>(std::make_tuple(std::move(bank_name)));
+            [this, header_str = std::move(header_str)](
+                std::string bank_name) mutable {
+                auto packet = frpc::pack<std::tuple<std::string>>(
+                    std::make_tuple(std::move(bank_name)));
                 std::vector<zmq::message_t> snd_bufs;
-                snd_bufs.emplace_back(zmq::message_t(header_str.data(), header_str.size()));
-                snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
+                snd_bufs.emplace_back(
+                    zmq::message_t(header_str.data(), header_str.size()));
+                snd_bufs.emplace_back(
+                    zmq::message_t(packet.data(), packet.size()));
                 m_channel->send(std::move(snd_bufs));
             },
             [] {});
-        auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>(
-            m_pool_ptr->getIoContext(),
-            m_config.channel_size);
+        auto channel_ptr =
+            std::make_shared<asio::experimental::concurrent_channel<void(
+                asio::error_code, std::string)>>(m_pool_ptr->getIoContext(),
+                                                 m_config.channel_size);
         {
-            std::function<void(std::tuple<std::string>)> func = [channel_ptr, this](std::tuple<std::string> tp) mutable {
-                auto& [reply] = tp;
-                if (!channel_ptr->try_send(asio::error_code{}, std::move(reply)))
-                    m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
-            };
+            std::function<void(std::tuple<std::string>)> func =
+                [channel_ptr, this](std::tuple<std::string> tp) mutable {
+                    auto& [reply] = tp;
+                    if (!channel_ptr->try_send(asio::error_code{},
+                                               std::move(reply)))
+                        m_error(FRPC_ERROR_FORMAT(
+                            "Failed to store message to channel!!!"));
+                };
             std::lock_guard lk(m_mtx);
             m_cb.emplace(req_id, std::move(func));
-            m_close_cb.emplace(req_id, [channel_ptr] {
-                channel_ptr->close();
-            });
+            m_close_cb.emplace(req_id, [channel_ptr] { channel_ptr->close(); });
         }
         return std::make_tuple(stream_ptr, channel_ptr);
     }
 
-    static auto create(frpc::ChannelConfig& config, std::function<void(std::string)> error) {
+    static auto create(frpc::ChannelConfig& config,
+                       std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
         return std::make_unique<StreamClient>(config, std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        const std::shared_ptr<zmq::socket_t>& socket_ptr,
                        std::function<void(std::string)> error) {
-        return std::make_unique<StreamClient>(config, context_ptr, socket_ptr, std::move(error));
+        return std::make_unique<StreamClient>(config,
+                                              context_ptr,
+                                              socket_ptr,
+                                              std::move(error));
     }
+
     static auto create(frpc::ChannelConfig& config,
                        const std::shared_ptr<zmq::context_t>& context_ptr,
                        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::dealer;
-        return std::make_unique<StreamClient>(config, context_ptr, std::move(error));
+        return std::make_unique<StreamClient>(config,
+                                              context_ptr,
+                                              std::move(error));
     }
 
-    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb,
+                 int events = ZMQ_EVENT_ALL) {
         return m_channel->monitor(std::move(cb), events);
     }
 
-private:
+  private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 2) {
-            m_error(FRPC_ERROR_FORMAT("client recv invalid stream server response packets!!!"));
+            m_error(FRPC_ERROR_FORMAT(
+                "client recv invalid stream server response packets!!!"));
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, StreamClientStreamServer, bool>;
-            auto [req_id, req_type, is_close] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
+            using FrpcHeader =
+                std::tuple<uint64_t, StreamClientStreamServer, bool>;
+            auto [req_id, req_type, is_close] =
+                frpc::unpack<FrpcHeader>(recv_bufs[0].data(),
+                                         recv_bufs[0].size());
             if (is_close) {
                 std::unique_lock lk(m_mtx);
                 m_cb.erase(req_id);
@@ -957,12 +1388,14 @@ private:
             }
             switch (req_type) {
                 case StreamClientStreamServer::hello_world: {
-                    auto [reply] = frpc::unpack<std::tuple<std::string>>(recv_bufs[1].data(), recv_bufs[1].size());
+                    auto [reply] = frpc::unpack<std::tuple<std::string>>(
+                        recv_bufs[1].data(), recv_bufs[1].size());
                     std::unique_lock lk(m_mtx);
                     if (m_cb.find(req_id) == m_cb.end())
                         break;
                     auto& cb = m_cb[req_id];
-                    auto callback = std::any_cast<std::function<void(std::tuple<std::string>)>>(cb);
+                    auto callback = std::any_cast<
+                        std::function<void(std::tuple<std::string>)>>(cb);
                     lk.unlock();
                     callback(std::move(reply));
                     break;
@@ -990,61 +1423,73 @@ private:
 };
 
 struct StreamServerHandler {
-    virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                             std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
+    virtual void hello_world(
+        std::shared_ptr<asio::experimental::concurrent_channel<
+            void(asio::error_code, std::string)>>,
+        std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 };
 
 struct CoroStreamServerHandler {
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                                              std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
+    virtual asio::awaitable<void> hello_world(
+        std::shared_ptr<asio::experimental::concurrent_channel<
+            void(asio::error_code, std::string)>>,
+        std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 #else
-    virtual void hello_world(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>,
-                             std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
+    virtual void hello_world(
+        std::shared_ptr<asio::experimental::concurrent_channel<
+            void(asio::error_code, std::string)>>,
+        std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 #endif
 };
 
 class StreamServer final {
-public:
+  public:
     StreamServer(const frpc::ChannelConfig& config,
-                 std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                 std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                              std::shared_ptr<StreamServerHandler>> handler,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_handler(std::move(handler))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config), m_handler(std::move(handler)), m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_bufs) {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(
+            config, error, [this](auto& recv_bufs) { dispatch(recv_bufs); });
     }
+
     StreamServer(const frpc::ChannelConfig& config,
                  const std::shared_ptr<zmq::context_t>& context_ptr,
                  const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                 std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                 std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                              std::shared_ptr<StreamServerHandler>> handler,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_handler(std::move(handler))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config), m_handler(std::move(handler)), m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_bufs) {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(
+            config, context_ptr, socket_ptr, error, [this](auto& recv_bufs) {
+                dispatch(recv_bufs);
+            });
     }
+
     StreamServer(const frpc::ChannelConfig& config,
                  const std::shared_ptr<zmq::context_t>& context_ptr,
-                 std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
+                 std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                              std::shared_ptr<StreamServerHandler>> handler,
                  std::function<void(std::string)> error)
-        : m_config(config)
-        , m_handler(std::move(handler))
-        , m_error(error) {
-        m_pool_ptr = std::make_unique<frpc::ContextPool>(config.context_pool_size);
+        : m_config(config), m_handler(std::move(handler)), m_error(error) {
+        m_pool_ptr =
+            std::make_unique<frpc::ContextPool>(config.context_pool_size);
         m_pool_ptr->start();
-        m_channel = std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_bufs) {
-            dispatch(recv_bufs);
-        });
+        m_channel = std::make_unique<frpc::BiChannel>(config,
+                                                      context_ptr,
+                                                      error,
+                                                      [this](auto& recv_bufs) {
+                                                          dispatch(recv_bufs);
+                                                      });
     }
+
     ~StreamServer() {
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -1062,111 +1507,165 @@ public:
         m_channel->start();
     }
 
-    static auto create(frpc::ChannelConfig& config,
-                       std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
-                       std::function<void(std::string)> error) {
+    static auto create(
+        frpc::ChannelConfig& config,
+        std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                     std::shared_ptr<StreamServerHandler>> handler,
+        std::function<void(std::string)> error) {
         config.socktype = zmq::socket_type::router;
         config.bind = true;
-        return std::make_unique<StreamServer>(config, std::move(handler), std::move(error));
-    }
-    static auto create(frpc::ChannelConfig& config,
-                       const std::shared_ptr<zmq::context_t>& context_ptr,
-                       const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                       std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
-                       std::function<void(std::string)> error) {
-        config.socktype = zmq::socket_type::router;
-        config.bind = true;
-        return std::make_unique<StreamServer>(config, context_ptr, socket_ptr, std::move(handler), std::move(error));
-    }
-    static auto create(frpc::ChannelConfig& config,
-                       const std::shared_ptr<zmq::context_t>& context_ptr,
-                       std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> handler,
-                       std::function<void(std::string)> error) {
-        config.socktype = zmq::socket_type::router;
-        config.bind = true;
-        return std::make_unique<StreamServer>(config, context_ptr, std::move(handler), std::move(error));
+        return std::make_unique<StreamServer>(config,
+                                              std::move(handler),
+                                              std::move(error));
     }
 
-    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb, int events = ZMQ_EVENT_ALL) {
+    static auto create(
+        frpc::ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        const std::shared_ptr<zmq::socket_t>& socket_ptr,
+        std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                     std::shared_ptr<StreamServerHandler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<StreamServer>(config,
+                                              context_ptr,
+                                              socket_ptr,
+                                              std::move(handler),
+                                              std::move(error));
+    }
+
+    static auto create(
+        frpc::ChannelConfig& config,
+        const std::shared_ptr<zmq::context_t>& context_ptr,
+        std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                     std::shared_ptr<StreamServerHandler>> handler,
+        std::function<void(std::string)> error) {
+        config.socktype = zmq::socket_type::router;
+        config.bind = true;
+        return std::make_unique<StreamServer>(config,
+                                              context_ptr,
+                                              std::move(handler),
+                                              std::move(error));
+    }
+
+    bool monitor(std::function<void(std::tuple<zmq_event_t, std::string>)> cb,
+                 int events = ZMQ_EVENT_ALL) {
         return m_channel->monitor(std::move(cb), events);
     }
 
-private:
+  private:
     void dispatch(std::vector<zmq::message_t>& recv_bufs) {
         if (recv_bufs.size() != 3) {
-            m_error(FRPC_ERROR_FORMAT("server recv invalid stream client request packets!!!"));
+            m_error(FRPC_ERROR_FORMAT(
+                "server recv invalid stream client request packets!!!"));
             return;
         }
         try {
             using FrpcHeader = std::tuple<uint64_t, StreamClientStreamServer>;
-            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
+            auto [req_id, req_type] =
+                frpc::unpack<FrpcHeader>(recv_bufs[1].data(),
+                                         recv_bufs[1].size());
             switch (req_type) {
                 case StreamClientStreamServer::hello_world: {
-                    auto tp = frpc::unpack<std::tuple<std::string>>(recv_bufs[2].data(), recv_bufs[2].size());
+                    auto tp = frpc::unpack<std::tuple<std::string>>(
+                        recv_bufs[2].data(), recv_bufs[2].size());
                     auto& [bank_name] = tp;
-                    std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>> channel_ptr;
+                    std::shared_ptr<asio::experimental::concurrent_channel<
+                        void(asio::error_code, std::string)>>
+                        channel_ptr;
                     {
                         std::lock_guard lk(m_mtx);
                         if (m_channel_mapping.contains(req_id)) {
-                            channel_ptr = std::any_cast<decltype(channel_ptr)>(m_channel_mapping[req_id]);
-                            if (!channel_ptr->try_send(asio::error_code{}, std::move(bank_name)))
-                                m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
+                            channel_ptr = std::any_cast<decltype(channel_ptr)>(
+                                m_channel_mapping[req_id]);
+                            if (!channel_ptr->try_send(asio::error_code{},
+                                                       std::move(bank_name)))
+                                m_error(FRPC_ERROR_FORMAT(
+                                    "Failed to store message to channel!!!"));
                             return;
                         }
-                        channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, std::string)>>(
-                            m_pool_ptr->getIoContext(),
-                            m_config.channel_size);
+                        channel_ptr = std::make_shared<
+                            asio::experimental::concurrent_channel<
+                                void(asio::error_code, std::string)>>(
+                            m_pool_ptr->getIoContext(), m_config.channel_size);
                         m_channel_mapping[req_id] = channel_ptr;
                     }
-                    if (!channel_ptr->try_send(asio::error_code{}, std::move(bank_name)))
-                        m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
+                    if (!channel_ptr->try_send(asio::error_code{},
+                                               std::move(bank_name)))
+                        m_error(FRPC_ERROR_FORMAT(
+                            "Failed to store message to channel!!!"));
 
                     auto is_open = std::make_tuple(req_id, req_type, false);
-                    auto is_open_buffer = frpc::pack<decltype(is_open)>(is_open);
+                    auto is_open_buffer =
+                        frpc::pack<decltype(is_open)>(is_open);
                     auto is_close = std::make_tuple(req_id, req_type, true);
-                    auto is_close_buffer = frpc::pack<decltype(is_close)>(is_close);
+                    auto is_close_buffer =
+                        frpc::pack<decltype(is_close)>(is_close);
                     // set open stream flag
-                    recv_bufs[1] = zmq::message_t(is_open_buffer.data(), is_open_buffer.size());
+                    recv_bufs[1] = zmq::message_t(is_open_buffer.data(),
+                                                  is_open_buffer.size());
                     // set close stream flag
-                    recv_bufs[2] = zmq::message_t(is_close_buffer.data(), is_close_buffer.size());
-                    auto ptr = std::make_shared<std::vector<zmq::message_t>>(std::move(recv_bufs));
+                    recv_bufs[2] = zmq::message_t(is_close_buffer.data(),
+                                                  is_close_buffer.size());
+                    auto ptr = std::make_shared<std::vector<zmq::message_t>>(
+                        std::move(recv_bufs));
 
-                    auto out = std::make_shared<frpc::Stream<void(std::string)>>(
-                        [ptr, this](std::string reply) mutable {
-                            auto& recv_bufs = *ptr;
-                            auto packet = frpc::pack<std::tuple<std::string>>(std::make_tuple(std::move(reply)));
-                            auto close = frpc::pack<bool>(false);
-                            std::vector<zmq::message_t> snd_bufs;
-                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[1].data(), recv_bufs[1].size()));
-                            snd_bufs.emplace_back(zmq::message_t(packet.data(), packet.size()));
-                            m_channel->send(std::move(snd_bufs));
-                        },
-                        [ptr, this, req_id, channel_ptr]() mutable {
-                            auto& recv_bufs = *ptr;
-                            std::vector<zmq::message_t> snd_bufs;
-                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[0].data(), recv_bufs[0].size()));
-                            snd_bufs.emplace_back(zmq::message_t(recv_bufs[2].data(), recv_bufs[2].size()));
-                            snd_bufs.emplace_back(zmq::message_t("C", 1));
-                            m_channel->send(std::move(snd_bufs));
-                            channel_ptr->close();
-                            {
-                                std::lock_guard lk(m_mtx);
-                                m_channel_mapping.erase(req_id);
+                    auto out =
+                        std::make_shared<frpc::Stream<void(std::string)>>(
+                            [ptr, this](std::string reply) mutable {
+                                auto& recv_bufs = *ptr;
+                                auto packet =
+                                    frpc::pack<std::tuple<std::string>>(
+                                        std::make_tuple(std::move(reply)));
+                                auto close = frpc::pack<bool>(false);
+                                std::vector<zmq::message_t> snd_bufs;
+                                snd_bufs.emplace_back(
+                                    zmq::message_t(recv_bufs[0].data(),
+                                                   recv_bufs[0].size()));
+                                snd_bufs.emplace_back(
+                                    zmq::message_t(recv_bufs[1].data(),
+                                                   recv_bufs[1].size()));
+                                snd_bufs.emplace_back(
+                                    zmq::message_t(packet.data(),
+                                                   packet.size()));
+                                m_channel->send(std::move(snd_bufs));
+                            },
+                            [ptr, this, req_id, channel_ptr]() mutable {
+                                auto& recv_bufs = *ptr;
+                                std::vector<zmq::message_t> snd_bufs;
+                                snd_bufs.emplace_back(
+                                    zmq::message_t(recv_bufs[0].data(),
+                                                   recv_bufs[0].size()));
+                                snd_bufs.emplace_back(
+                                    zmq::message_t(recv_bufs[2].data(),
+                                                   recv_bufs[2].size()));
+                                snd_bufs.emplace_back(zmq::message_t("C", 1));
+                                m_channel->send(std::move(snd_bufs));
+                                channel_ptr->close();
+                                {
+                                    std::lock_guard lk(m_mtx);
+                                    m_channel_mapping.erase(req_id);
+                                }
+                            });
+                    std::visit(
+                        [&](auto&& arg) mutable {
+                            using T = std::decay_t<decltype(arg)>;
+                            if constexpr (std::is_same_v<
+                                              T,
+                                              std::shared_ptr<
+                                                  StreamServerHandler>>) {
+                                arg->hello_world(std::move(channel_ptr),
+                                                 std::move(out));
+                            } else {
+                                asio::co_spawn(
+                                    m_pool_ptr->getIoContext(),
+                                    arg->hello_world(std::move(channel_ptr),
+                                                     std::move(out)),
+                                    asio::detached);
                             }
-                        });
-                    std::visit([&](auto&& arg) mutable {
-                        using T = std::decay_t<decltype(arg)>;
-                        if constexpr (std::is_same_v<T, std::shared_ptr<StreamServerHandler>>) {
-                            arg->hello_world(std::move(channel_ptr), std::move(out));
-                        } else {
-                            asio::co_spawn(
-                                m_pool_ptr->getIoContext(),
-                                arg->hello_world(std::move(channel_ptr), std::move(out)),
-                                asio::detached);
-                        }
-                    },
-                               m_handler);
+                        },
+                        m_handler);
                     break;
                 }
                 default:
@@ -1182,7 +1681,9 @@ private:
     }
 
     frpc::ChannelConfig m_config;
-    std::variant<std::shared_ptr<CoroStreamServerHandler>, std::shared_ptr<StreamServerHandler>> m_handler;
+    std::variant<std::shared_ptr<CoroStreamServerHandler>,
+                 std::shared_ptr<StreamServerHandler>>
+        m_handler;
     std::function<void(std::string)> m_error;
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::mutex m_mtx;
@@ -1192,6 +1693,6 @@ private:
 
 #endif
 
-} // namespace fantasy
+}  // namespace fantasy
 
-#endif //_FANTASY_H_
+#endif  //_FANTASY_H_

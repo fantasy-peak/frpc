@@ -1,11 +1,11 @@
 #ifndef _FRPC_UTILS_H_
 #define _FRPC_UTILS_H_
 
-#include <functional>
 #include <string>
+#include <functional>
 
-#include <uuid/uuid.h>
 #include <msgpack.hpp>
+#include <uuid/uuid.h>
 
 namespace nlohmann {
 
@@ -25,7 +25,7 @@ void from_json(const nlohmann::json& j, std::optional<T>& v) {
         v = j.get<T>();
 }
 
-} // namespace nlohmann
+}  // namespace nlohmann
 
 namespace frpc {
 
@@ -78,9 +78,10 @@ template <typename R, typename... Args>
 struct Stream<R(Args...)> : std::function<R(Args...)> {
     template <typename F>
     Stream(F&& func, std::function<void()>&& close)
-        : std::function<R(Args...)>(std::forward<F>(func))
-        , m_close(std::move(close)) {
+        : std::function<R(Args...)>(std::forward<F>(func)),
+          m_close(std::move(close)) {
     }
+
     Stream(const Stream&) = delete;
     Stream(Stream&&) = default;
     Stream& operator=(const Stream&) = delete;
@@ -99,10 +100,10 @@ struct Stream<R(Args...)> : std::function<R(Args...)> {
         m_close = nullptr;
     }
 
-private:
+  private:
     std::function<void()> m_close;
 };
 
-} // namespace frpc
+}  // namespace frpc
 
-#endif // _FRPC_UTILS_H_
+#endif  // _FRPC_UTILS_H_
