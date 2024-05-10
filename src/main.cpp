@@ -335,6 +335,7 @@ nlohmann::json parseYaml(const std::string& file) {
             filename = kv.second["filename"].as<std::string>();
             ast["node"][node_name]["filename"] = filename;
             ast["node"][node_name]["namespace"] = namespace_str;
+            ast["node"][node_name]["version"] = VERSION;
             if (kv.second["include"]) {
                 std::filesystem::path p = file;
                 auto include_yaml = kv.second["include"].as<std::vector<std::string>>();
@@ -349,6 +350,7 @@ nlohmann::json parseYaml(const std::string& file) {
         data["node_name"] = node_name;
         data["property"]["filename"] = filename;
         data["property"]["namespace"] = namespace_str;
+        data["property"]["version"] = VERSION;
         auto type = config[node_name]["type"].as<std::string>();
         data["type"] = type;
         if (type == "struct") {

@@ -1,6 +1,8 @@
 set_project("frpc")
-set_version("0.0.1", {build = "%Y%m%d%H%M"})
-set_xmakever("2.8.5")
+set_version("1.0.0", {build = "%Y%m%d%H%M"})
+set_xmakever("2.8.9")
+
+add_defines("VERSION=\"1.0.0\"")
 
 add_repositories("my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
 
