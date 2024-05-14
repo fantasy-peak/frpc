@@ -33,6 +33,12 @@ xmake install -o . --file=./test_xmake.lua
 ./bin/coro_frpc_bi
 ```
 
+## Docker compilation environment
+```
+git clone https://github.com/fantasy-peak/frpc.git
+cd frpc && cd docker && make
+```
+
 ## Type Mapping
 | frpc type    | c++ type           | frpc type    | c++ type           |
 |---------|--------------------|---------|--------------------|
@@ -79,6 +85,7 @@ HelloWorldApi:
       inputs:
         bank_info: {type: BankInfo}
         blance: {type: u64}
+        date: {type: DateTime} # frpc DateTime type
       outputs:
         reply: {type: string}
         info: {type: Info}
