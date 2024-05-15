@@ -664,7 +664,7 @@ class HelloWorldServer final {
         try {
             using FrpcHeader =
                 std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
-            auto [req_id, req_type] =
+            [[maybe_unused]] auto [req_id, req_type] =
                 frpc::unpack<FrpcHeader>(recv_bufs[1].data(),
                                          recv_bufs[1].size());
             switch (req_type) {

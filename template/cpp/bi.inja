@@ -373,7 +373,7 @@ private:
         }
         try {
             using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}>;
-            auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
+            [[maybe_unused]] auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch(req_type) {
             {% for func in value.definitions %}
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
