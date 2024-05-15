@@ -86,13 +86,13 @@ public:
                 m_channel->send(std::move(snd_bufs));
             },
             [] {});
-        auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.outputs)}})>>(
+        auto channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.outputs)}})>>(
             m_pool_ptr->getIoContext(),
             m_config.channel_size);
         {
             std::function<void(std::tuple<{{_format_args_type(func.outputs)}}>)> func = [channel_ptr, this](std::tuple<{{_format_args_type(func.outputs)}}> tp) mutable {
                 auto& [{{_format_args_name(func.outputs)}}] = tp;
-                if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.outputs)}}))
+                if (!channel_ptr->try_send(frpc::error_code{}, {{_format_args_name_and_move(func.outputs)}}))
                     m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
             };
             std::lock_guard lk(m_mtx);
@@ -179,7 +179,7 @@ private:
 
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
-    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
+    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
     {% endfor %}
 };
@@ -187,10 +187,10 @@ struct {{value.callee}}Handler {
 struct Coro{{value.callee}}Handler {
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
-    virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
+    virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #else
-    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>,
+    virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
 #endif
     {% endfor %}
@@ -291,21 +291,21 @@ private:
                 case {{value.caller}}{{value.callee}}::{{func.func_name}}: {
                     auto tp = frpc::unpack<std::tuple<{{_format_args_type(func.inputs)}}>>(recv_bufs[2].data(), recv_bufs[2].size());
                     auto& [{{_format_args_name(func.inputs)}}] = tp;
-                    std::shared_ptr<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>> channel_ptr;
+                    std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>> channel_ptr;
                     {
                         std::lock_guard lk(m_mtx);
                         if (m_channel_mapping.contains(req_id)) {
                             channel_ptr = std::any_cast<decltype(channel_ptr)>(m_channel_mapping[req_id]);
-                            if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
+                            if (!channel_ptr->try_send(frpc::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
                                 m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
                             return;
                         }
-                        channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(asio::error_code, {{_format_args_type(func.inputs)}})>>(
+                        channel_ptr = std::make_shared<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>(
                             m_pool_ptr->getIoContext(), 
                             m_config.channel_size);
                         m_channel_mapping[req_id] = channel_ptr;
                     }
-                    if (!channel_ptr->try_send(asio::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
+                    if (!channel_ptr->try_send(frpc::error_code{}, {{_format_args_name_and_move(func.inputs)}}))
                         m_error(FRPC_ERROR_FORMAT("Failed to store message to channel!!!"));
 
                     auto is_open = std::make_tuple(req_id, req_type, false);

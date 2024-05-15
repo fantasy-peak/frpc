@@ -1326,13 +1326,13 @@ class StreamClient final {
             [] {});
         auto channel_ptr =
             std::make_shared<asio::experimental::concurrent_channel<void(
-                asio::error_code, std::string)>>(m_pool_ptr->getIoContext(),
+                frpc::error_code, std::string)>>(m_pool_ptr->getIoContext(),
                                                  m_config.channel_size);
         {
             std::function<void(std::tuple<std::string>)> func =
                 [channel_ptr, this](std::tuple<std::string> tp) mutable {
                     auto& [reply] = tp;
-                    if (!channel_ptr->try_send(asio::error_code{},
+                    if (!channel_ptr->try_send(frpc::error_code{},
                                                std::move(reply)))
                         m_error(FRPC_ERROR_FORMAT(
                             "Failed to store message to channel!!!"));
@@ -1433,7 +1433,7 @@ class StreamClient final {
 struct StreamServerHandler {
     virtual void hello_world(
         std::shared_ptr<asio::experimental::concurrent_channel<
-            void(asio::error_code, std::string)>>,
+            void(frpc::error_code, std::string)>>,
         std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 };
 
@@ -1441,12 +1441,12 @@ struct CoroStreamServerHandler {
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(
         std::shared_ptr<asio::experimental::concurrent_channel<
-            void(asio::error_code, std::string)>>,
+            void(frpc::error_code, std::string)>>,
         std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 #else
     virtual void hello_world(
         std::shared_ptr<asio::experimental::concurrent_channel<
-            void(asio::error_code, std::string)>>,
+            void(frpc::error_code, std::string)>>,
         std::shared_ptr<frpc::Stream<void(std::string)>>) noexcept = 0;
 #endif
 };
@@ -1580,14 +1580,14 @@ class StreamServer final {
                         recv_bufs[2].data(), recv_bufs[2].size());
                     auto& [bank_name] = tp;
                     std::shared_ptr<asio::experimental::concurrent_channel<
-                        void(asio::error_code, std::string)>>
+                        void(frpc::error_code, std::string)>>
                         channel_ptr;
                     {
                         std::lock_guard lk(m_mtx);
                         if (m_channel_mapping.contains(req_id)) {
                             channel_ptr = std::any_cast<decltype(channel_ptr)>(
                                 m_channel_mapping[req_id]);
-                            if (!channel_ptr->try_send(asio::error_code{},
+                            if (!channel_ptr->try_send(frpc::error_code{},
                                                        std::move(bank_name)))
                                 m_error(FRPC_ERROR_FORMAT(
                                     "Failed to store message to channel!!!"));
@@ -1595,11 +1595,11 @@ class StreamServer final {
                         }
                         channel_ptr = std::make_shared<
                             asio::experimental::concurrent_channel<
-                                void(asio::error_code, std::string)>>(
+                                void(frpc::error_code, std::string)>>(
                             m_pool_ptr->getIoContext(), m_config.channel_size);
                         m_channel_mapping[req_id] = channel_ptr;
                     }
-                    if (!channel_ptr->try_send(asio::error_code{},
+                    if (!channel_ptr->try_send(frpc::error_code{},
                                                std::move(bank_name)))
                         m_error(FRPC_ERROR_FORMAT(
                             "Failed to store message to channel!!!"));

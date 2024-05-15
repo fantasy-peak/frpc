@@ -4,6 +4,7 @@
 
 #include <spdlog/spdlog.h>
 
+#define FRPC_USE_BOOST_ASIO 1
 #include "fantasy.hpp"
 
 inline std::string addr{"tcp://127.0.0.1:5878"};
@@ -37,6 +38,13 @@ struct CoroHandler final : public fantasy::AsioCoroHelloWorldServerHandler {
                      fantasy::toString(bank_info), bank_name, blance, date.has_value() ? date.value() : "nullopt", frpc::toString(date_time));
         fantasy::Info info;
         info.name = "coro test";
+        boost::asio::co_spawn(
+            co_await boost::asio::this_coro::executor,
+            []() -> boost::asio::awaitable<void> {
+                spdlog::info("test boost");
+                co_return;
+            },
+            boost::asio::detached);
         cb("coro hello world", std::move(info), 556, std::nullopt);
         co_return;
     }
@@ -76,7 +84,7 @@ void start_server() {
     server->monitor(
         [](std::tuple<zmq_event_t, std::string> data) {
             auto& [event, point] = data;
-            spdlog::info("bi coro server monitor: {} {}",frpc::getEventName(event.event), point);
+            spdlog::info("bi coro server monitor: {} {}", frpc::getEventName(event.event), point);
         },
         ZMQ_EVENT_ACCEPTED | ZMQ_EVENT_DISCONNECTED);
     server->start();
