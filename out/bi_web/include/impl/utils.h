@@ -65,12 +65,16 @@ struct ChannelConfig {
     std::size_t channel_size{50000};
 };
 
-inline std::string uniqueAddr() {
+inline std::string createUuid() {
     uuid_t uuid;
     char s[37];
     uuid_generate_random(uuid);
     uuid_unparse(uuid, s);
-    return "inproc://" + std::string(s);
+    return std::string(s);
+}
+
+inline std::string uniqueAddr() {
+    return "inproc://" + createUuid();
 }
 
 template <typename>

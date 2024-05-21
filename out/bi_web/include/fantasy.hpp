@@ -114,7 +114,7 @@ class HelloWorldClient final {
         frpc::DateTime date_time,
         std::function<
             void(std::string, Info, uint64_t, std::optional<std::string>)> cb) {
-        auto req_id = m_req_id.fetch_add(1);
+        auto req_id = frpc::createUuid();
         auto snd_bufs =
             makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
                 req_id,
@@ -140,7 +140,7 @@ class HelloWorldClient final {
             void(std::string, Info, uint64_t, std::optional<std::string>)> cb,
         const std::chrono::milliseconds& timeout,
         std::function<void()> timeout_cb) {
-        auto req_id = m_req_id.fetch_add(1);
+        auto req_id = frpc::createUuid();
         auto snd_bufs =
             makeRequestPacket<HelloWorldClientHelloWorldServer::hello_world>(
                 req_id,
@@ -393,7 +393,8 @@ class HelloWorldClient final {
 
   private:
     template <HelloWorldClientHelloWorldServer type, typename T>
-    std::vector<zmq::message_t> makeRequestPacket(uint64_t req_id, T&& t) {
+    std::vector<zmq::message_t> makeRequestPacket(const std::string& req_id,
+                                                  T&& t) {
         auto header = std::make_tuple(req_id, type);
         auto buffer = frpc::pack<decltype(header)>(header);
         auto packet = frpc::pack<T>(std::forward<T>(t));
@@ -404,7 +405,7 @@ class HelloWorldClient final {
         return snd_bufs;
     }
 
-    void callTimeoutCallback(uint64_t req_id) {
+    void callTimeoutCallback(const std::string& req_id) {
         std::unique_lock lk(m_mtx);
         if (m_timeout_cb.find(req_id) == m_timeout_cb.end())
             return;
@@ -422,7 +423,7 @@ class HelloWorldClient final {
         }
         try {
             using FrpcHeader =
-                std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+                std::tuple<std::string, HelloWorldClientHelloWorldServer>;
             auto [req_id, req_type] =
                 frpc::unpack<FrpcHeader>(recv_bufs[0].data(),
                                          recv_bufs[0].size());
@@ -467,9 +468,8 @@ class HelloWorldClient final {
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::function<void(std::string)> m_error;
     std::mutex m_mtx;
-    std::unordered_map<uint64_t, std::any> m_cb;
-    std::unordered_map<uint64_t, std::function<void()>> m_timeout_cb;
-    std::atomic_uint64_t m_req_id{0};
+    std::unordered_map<std::string, std::any> m_cb;
+    std::unordered_map<std::string, std::function<void()>> m_timeout_cb;
 };
 
 struct HelloWorldServerHandler {
@@ -663,7 +663,7 @@ class HelloWorldServer final {
         }
         try {
             using FrpcHeader =
-                std::tuple<uint64_t, HelloWorldClientHelloWorldServer>;
+                std::tuple<std::string, HelloWorldClientHelloWorldServer>;
             [[maybe_unused]] auto [req_id, req_type] =
                 frpc::unpack<FrpcHeader>(recv_bufs[1].data(),
                                          recv_bufs[1].size());
@@ -1304,7 +1304,7 @@ class StreamClient final {
     }
 
     auto hello_world() {
-        auto req_id = m_req_id.fetch_add(1);
+        auto req_id = frpc::createUuid();
         auto header =
             std::make_tuple(req_id, StreamClientStreamServer::hello_world);
 
@@ -1383,7 +1383,7 @@ class StreamClient final {
         }
         try {
             using FrpcHeader =
-                std::tuple<uint64_t, StreamClientStreamServer, bool>;
+                std::tuple<std::string, StreamClientStreamServer, bool>;
             auto [req_id, req_type, is_close] =
                 frpc::unpack<FrpcHeader>(recv_bufs[0].data(),
                                          recv_bufs[0].size());
@@ -1424,9 +1424,8 @@ class StreamClient final {
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::function<void(std::string)> m_error;
     std::mutex m_mtx;
-    std::unordered_map<uint64_t, std::any> m_cb;
-    std::unordered_map<uint64_t, std::function<void()>> m_close_cb;
-    std::atomic_uint64_t m_req_id{0};
+    std::unordered_map<std::string, std::any> m_cb;
+    std::unordered_map<std::string, std::function<void()>> m_close_cb;
     std::unique_ptr<frpc::ContextPool> m_pool_ptr;
 };
 
@@ -1570,7 +1569,8 @@ class StreamServer final {
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, StreamClientStreamServer>;
+            using FrpcHeader =
+                std::tuple<std::string, StreamClientStreamServer>;
             auto [req_id, req_type] =
                 frpc::unpack<FrpcHeader>(recv_bufs[1].data(),
                                          recv_bufs[1].size());
@@ -1696,7 +1696,7 @@ class StreamServer final {
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::mutex m_mtx;
     std::unique_ptr<frpc::ContextPool> m_pool_ptr;
-    std::unordered_map<uint64_t, std::any> m_channel_mapping;
+    std::unordered_map<std::string, std::any> m_channel_mapping;
 };
 
 #endif

@@ -54,7 +54,7 @@ public:
     {% for func in value.definitions %}
 
         void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) {
-            auto req_id = m_req_id.fetch_add(1);
+            auto req_id = frpc::createUuid();
             auto snd_bufs = makeRequestPacket<{{value.caller}}{{value.callee}}::{{func.func_name}}>(
                 req_id,
                 std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
@@ -69,7 +69,7 @@ public:
             std::function<void({{_format_args_type(func.outputs)}})> cb,
             const std::chrono::milliseconds& timeout,
             std::function<void()> timeout_cb) {
-            auto req_id = m_req_id.fetch_add(1);
+            auto req_id = frpc::createUuid();
             auto snd_bufs = makeRequestPacket<{{value.caller}}{{value.callee}}::{{func.func_name}}>(
                 req_id,
                 std::make_tuple({{_format_args_name_and_move(func.inputs)}}));
@@ -176,7 +176,7 @@ public:
 
 private:
     template <{{value.caller}}{{value.callee}} type, typename T>
-    std::vector<zmq::message_t> makeRequestPacket(uint64_t req_id, T&& t) {
+    std::vector<zmq::message_t> makeRequestPacket(const std::string& req_id, T&& t) {
         auto header = std::make_tuple(req_id, type);
         auto buffer = frpc::pack<decltype(header)>(header);
         auto packet = frpc::pack<T>(std::forward<T>(t));
@@ -187,7 +187,7 @@ private:
         return snd_bufs;
     }
 
-    void callTimeoutCallback(uint64_t req_id) {
+    void callTimeoutCallback(const std::string& req_id) {
         std::unique_lock lk(m_mtx);
         if (m_timeout_cb.find(req_id) == m_timeout_cb.end())
             return;
@@ -204,7 +204,7 @@ private:
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}>;
+            using FrpcHeader = std::tuple<std::string, {{value.caller}}{{value.callee}}>;
             auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
             std::unique_lock lk(m_mtx);
             if (m_cb.find(req_id) == m_cb.end())
@@ -237,10 +237,9 @@ private:
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::function<void(std::string)> m_error;
     std::mutex m_mtx;
-    std::unordered_map<uint64_t, std::any> m_cb;
-    std::unordered_map<uint64_t, std::function<void()>> m_timeout_cb;
-    std::atomic_uint64_t m_req_id{0};
-}; 
+    std::unordered_map<std::string, std::any> m_cb;
+    std::unordered_map<std::string, std::function<void()>> m_timeout_cb;
+};
 
 struct {{value.callee}}Handler {
     {% for func in value.definitions %}
@@ -372,7 +371,7 @@ private:
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}>;
+            using FrpcHeader = std::tuple<std::string, {{value.caller}}{{value.callee}}>;
             [[maybe_unused]] auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch(req_type) {
             {% for func in value.definitions %}

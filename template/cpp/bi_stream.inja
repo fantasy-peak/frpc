@@ -71,7 +71,7 @@ public:
     {% for func in value.definitions %}
 
     auto {{func.func_name}}() {
-        auto req_id = m_req_id.fetch_add(1);
+        auto req_id = frpc::createUuid();
         auto header = std::make_tuple(req_id, {{value.caller}}{{value.callee}}::{{func.func_name}});
 
         auto buffer = frpc::pack<decltype(header)>(header);
@@ -132,7 +132,7 @@ private:
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}, bool>;
+            using FrpcHeader = std::tuple<std::string, {{value.caller}}{{value.callee}}, bool>;
             auto [req_id, req_type, is_close] = frpc::unpack<FrpcHeader>(recv_bufs[0].data(), recv_bufs[0].size());
             if (is_close) {
                 std::unique_lock lk(m_mtx);
@@ -171,9 +171,8 @@ private:
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::function<void(std::string)> m_error;
     std::mutex m_mtx;
-    std::unordered_map<uint64_t, std::any> m_cb;
-    std::unordered_map<uint64_t, std::function<void()>> m_close_cb;
-    std::atomic_uint64_t m_req_id{0};
+    std::unordered_map<std::string, std::any> m_cb;
+    std::unordered_map<std::string, std::function<void()>> m_close_cb;
     std::unique_ptr<frpc::ContextPool> m_pool_ptr;
 };
 
@@ -284,7 +283,7 @@ private:
             return;
         }
         try {
-            using FrpcHeader = std::tuple<uint64_t, {{value.caller}}{{value.callee}}>;
+            using FrpcHeader = std::tuple<std::string, {{value.caller}}{{value.callee}}>;
             auto [req_id, req_type] = frpc::unpack<FrpcHeader>(recv_bufs[1].data(), recv_bufs[1].size());
             switch(req_type) {
             {% for func in value.definitions %}
@@ -375,7 +374,7 @@ private:
     std::unique_ptr<frpc::BiChannel> m_channel;
     std::mutex m_mtx;
     std::unique_ptr<frpc::ContextPool> m_pool_ptr;
-    std::unordered_map<uint64_t, std::any> m_channel_mapping;
+    std::unordered_map<std::string, std::any> m_channel_mapping;
 }; 
 
 #endif
