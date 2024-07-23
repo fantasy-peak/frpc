@@ -63,6 +63,8 @@ struct ChannelConfig {
     bool probe{false};
     int16_t context_pool_size{1};
     std::size_t channel_size{50000};
+    std::optional<int32_t> heartbeat_timeout;
+    std::optional<int32_t> heartbeat_ivl;
 };
 
 inline std::string createUuid() {

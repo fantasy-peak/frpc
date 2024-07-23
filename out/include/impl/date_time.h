@@ -26,7 +26,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Date, year, month, day)
 
 inline std::string toString(const Date& value) {
     std::ostringstream ss;
-    ss << "Date" << " year=" << value.year
+    ss << "Date"
+       << " year=" << value.year
        << " month=" << static_cast<uint32_t>(value.month)
        << " day=" << static_cast<uint32_t>(value.day);
     return ss.str();
@@ -60,7 +61,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(Time, hour, minute, second, microsecond)
 
 inline std::string toString(const Time& value) {
     std::ostringstream ss;
-    ss << "Time" << " hour=" << static_cast<uint32_t>(value.hour)
+    ss << "Time"
+       << " hour=" << static_cast<uint32_t>(value.hour)
        << " minute=" << static_cast<uint32_t>(value.minute)
        << " second=" << static_cast<uint32_t>(value.second)
        << " microsecond=" << value.microsecond;
@@ -92,8 +94,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(DateTime, date, time)
 
 inline std::string toString(const DateTime& value) {
     std::ostringstream ss;
-    ss << "DateTime" << " date=" << toString(value.date)
-       << " time=" << toString(value.time);
+    ss << "DateTime"
+       << " date=" << toString(value.date) << " time=" << toString(value.time);
     return ss.str();
 }
 
@@ -111,9 +113,7 @@ inline DateTime getFrpcDateTime(std::chrono::system_clock::time_point now_time =
         now_time.time_since_epoch());
     auto microseconds = mic.count() % 1000000;
     auto time_tt = std::chrono::system_clock::to_time_t(now_time);
-
-    struct tm work {};
-
+    struct tm work{};
     localtime_r(&time_tt, &work);
     Date d(1900 + work.tm_year, work.tm_mon + 1, work.tm_mday);
     Time t(work.tm_hour, work.tm_min, work.tm_sec, microseconds);
@@ -122,8 +122,7 @@ inline DateTime getFrpcDateTime(std::chrono::system_clock::time_point now_time =
 
 inline std::chrono::system_clock::time_point frpcDateTimeToTimePoint(
     const DateTime& date_time) {
-    struct tm timeinfo {};
-
+    struct tm timeinfo{};
     timeinfo.tm_year = date_time.date.year - 1900;
     timeinfo.tm_mon = date_time.date.month - 1;
     timeinfo.tm_mday = date_time.date.day;
@@ -139,8 +138,7 @@ template <bool millisec = false>
 inline std::string fromFrpcDateTime(
     const DateTime& date_time,
     const std::string& format = "%Y-%m-%d %H:%M:%S") {
-    struct tm timeinfo {};
-
+    struct tm timeinfo{};
     timeinfo.tm_year = date_time.date.year - 1900;
     timeinfo.tm_mon = date_time.date.month - 1;
     timeinfo.tm_mday = date_time.date.day;
@@ -159,8 +157,7 @@ inline std::string fromFrpcDateTime(
 inline DateTime toFrpcDateTime(
     const std::string& date,
     const std::string& format = "%Y-%m-%d %H:%M:%S.") {
-    struct tm tm {};
-
+    struct tm tm{};
     std::stringstream ss(date);
     ss >> std::get_time(&tm, format.c_str());
     int milliseconds = 0;

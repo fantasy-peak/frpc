@@ -216,6 +216,15 @@ class BiChannel final {
         m_socket_ptr->set(zmq::sockopt::sndbuf, config.sendbuf);
         m_socket_ptr->set(zmq::sockopt::rcvbuf, config.recvbuf);
         m_socket_ptr->set(zmq::sockopt::linger, config.linger);
+        if (config.heartbeat_timeout)
+            m_socket_ptr->set(zmq::sockopt::heartbeat_timeout,
+                              config.heartbeat_timeout.value());
+        // http://api.zeromq.org/4-2:zmq-setsockopt
+        // https://github.com/zeromq/libzmq/issues/3188
+        // https://wenku.csdn.net/answer/5e884e5fe84044989d65c9b2ec54f122
+        if (config.heartbeat_ivl)
+            m_socket_ptr->set(zmq::sockopt::heartbeat_ivl,
+                              config.heartbeat_ivl.value());
         if (config.tcp_keepalive) {
             m_socket_ptr->set(zmq::sockopt::tcp_keepalive, 1);
             m_socket_ptr->set(zmq::sockopt::tcp_keepalive_idle,
