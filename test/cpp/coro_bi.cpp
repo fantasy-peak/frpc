@@ -75,6 +75,10 @@ asio::awaitable<void> start_client() {
 void start_server() {
     frpc::ChannelConfig bi_config{};
     bi_config.addr = addr;
+    bi_config.setsockopt_callback = [](auto& socket) {
+        spdlog::info("setsockopt_callback");
+        socket.set(zmq::sockopt::heartbeat_ivl, 5000);
+    };
     auto server = fantasy::HelloWorldServer::create(
         bi_config,
         std::make_shared<CoroHandler>(),

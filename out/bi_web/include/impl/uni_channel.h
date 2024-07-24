@@ -160,6 +160,8 @@ class UniChannel final {
         }
         if (config.socktype == zmq::socket_type::sub)
             m_socket_ptr->set(zmq::sockopt::subscribe, "");
+        if (config.setsockopt_callback)
+            config.setsockopt_callback(*m_socket_ptr);
         if (config.bind)
             m_socket_ptr->bind(config.addr);
         else

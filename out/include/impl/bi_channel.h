@@ -237,6 +237,8 @@ class BiChannel final {
         if (config.probe) {
             m_socket_ptr->set(zmq::sockopt::probe_router, 1);
         }
+        if (config.setsockopt_callback)
+            config.setsockopt_callback(*m_socket_ptr);
         if (config.bind) {
             if (config.socktype == zmq::socket_type::router) {
                 if (config.mandatory)

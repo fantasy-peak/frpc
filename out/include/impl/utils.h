@@ -65,6 +65,7 @@ struct ChannelConfig {
     std::size_t channel_size{50000};
     std::optional<int32_t> heartbeat_timeout;
     std::optional<int32_t> heartbeat_ivl;
+    std::function<void(zmq::socket_t&)> setsockopt_callback;
 };
 
 inline std::string createUuid() {
