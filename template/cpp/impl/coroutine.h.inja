@@ -4,15 +4,12 @@
 #define _FRPC_COROUTINE_H_
 
 #include <algorithm>
-#include <atomic>
 #include <cassert>
-#include <condition_variable>
 #include <coroutine>
 #include <exception>
-#include <future>
-#include <mutex>
 #include <optional>
 #include <type_traits>
+#include <functional>
 
 namespace frpc {
 

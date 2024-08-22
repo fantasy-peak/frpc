@@ -1,4 +1,4 @@
-name: ubuntu-clang19
+name: ubuntu-clang20
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
           sudo add-apt-repository "deb http://apt.llvm.org/$(lsb_release -cs)/ llvm-toolchain-$(lsb_release -cs) main"
           sudo apt update
           sudo apt list | grep clang
-          sudo apt install clang-19 -y
+          sudo apt install clang-20 -y
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt install -y gcc-13 g++-13
 
@@ -38,8 +38,8 @@ jobs:
         run: |
           export XMAKE_ROOT="y"
           g++-13 -v
-          export CXX=clang++-19
-          export CC=clang-19
+          export CXX=clang++-20
+          export CC=clang-20
           xmake build -y
           xmake install -o .
 

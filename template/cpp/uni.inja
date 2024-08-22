@@ -35,12 +35,18 @@ MSGPACK_ADD_ENUM({{node.property.namespace}}::{{value.caller}}{{value.callee}})
 namespace {{node.property.namespace}} {
 
 struct {{value.callee}}Handler {
+    {{value.callee}}Handler() = default;
+    virtual ~{{value.callee}}Handler() = default;
+
     {% for func in value.definitions %}
         virtual void {{func.func_name}}({{_format_args(func.inputs)}}) noexcept = 0;
     {% endfor %}
 };
 
 struct AsioCoro{{value.callee}}Handler {
+    AsioCoro{{value.callee}}Handler() = default;
+    virtual ~AsioCoro{{value.callee}}Handler() = default;
+
 #ifdef __cpp_impl_coroutine
     {% for func in value.definitions %}
         virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}) noexcept = 0;
@@ -54,6 +60,9 @@ struct AsioCoro{{value.callee}}Handler {
 };
 
 struct FrpcCoro{{value.callee}}Handler {
+    FrpcCoro{{value.callee}}Handler() = default;
+    virtual ~FrpcCoro{{value.callee}}Handler() = default;
+
 #ifdef __cpp_impl_coroutine
     {% for func in value.definitions %}
         virtual frpc::Task<void> {{func.func_name}}({{_format_args(func.inputs)}}) noexcept = 0;
@@ -110,6 +119,11 @@ public:
             m_pool_ptr->stop();
 #endif
     }
+
+    {{value.callee}}(const {{value.callee}}&) = delete;
+    {{value.callee}}& operator=(const {{value.callee}}&) = delete;
+    {{value.callee}}({{value.callee}}&&) = delete;
+    {{value.callee}}& operator=({{value.callee}}&&) = delete;
 
     void start() {
         m_channel->start();
@@ -240,6 +254,11 @@ public:
         }
 
         ~{{value.caller}}() {}
+
+        {{value.caller}}(const {{value.caller}}&) = delete;
+        {{value.caller}}& operator=(const {{value.caller}}&) = delete;
+        {{value.caller}}({{value.caller}}&&) = delete;
+        {{value.caller}}& operator=({{value.caller}}&&) = delete;
 
         static auto create(frpc::ChannelConfig& config) {
             if ((config.socktype != zmq::socket_type::pub) && config.socktype != zmq::socket_type::push)

@@ -6,6 +6,7 @@
 #include <memory>
 #include <functional>
 #include <thread>
+#include <mutex>
 
 #include <zmq.hpp>
 #include <zmq_addon.hpp>

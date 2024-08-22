@@ -1,7 +1,7 @@
 # frpc
 *An rpc code generation framework for c++, It supports c++17/20/23*
 
-[![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-gcc13/badge.svg)](https://github.com/fantasy-peak/frpc/actions) [![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-clang19/badge.svg)](https://github.com/fantasy-peak/frpc/actions) [![](https://img.shields.io/badge/language-C%2B%2B23-yellow.svg
+[![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-gcc13/badge.svg)](https://github.com/fantasy-peak/frpc/actions) [![](https://github.com/fantasy-peak/frpc/workflows/ubuntu-clang20/badge.svg)](https://github.com/fantasy-peak/frpc/actions) [![](https://img.shields.io/badge/language-C%2B%2B23-yellow.svg
 )](https://en.wikipedia.org/wiki/C%2B%2B17)
 
 ## Support this repository:

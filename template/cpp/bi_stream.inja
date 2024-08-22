@@ -56,6 +56,11 @@ public:
             m_pool_ptr->stop();
     }
 
+    {{value.caller}}(const {{value.caller}}&) = delete;
+    {{value.caller}}& operator=(const {{value.caller}}&) = delete;
+    {{value.caller}}({{value.caller}}&&) = delete;
+    {{value.caller}}& operator=({{value.caller}}&&) = delete;
+
     void start() {
         m_channel->start();
     }
@@ -177,6 +182,9 @@ private:
 };
 
 struct {{value.callee}}Handler {
+    {{value.callee}}Handler() = default;
+    virtual ~{{value.callee}}Handler() = default;
+
     {% for func in value.definitions %}
     virtual void {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>,
         std::shared_ptr<frpc::Stream<void({{_format_args_type(func.outputs)}})>>) noexcept = 0;
@@ -184,6 +192,9 @@ struct {{value.callee}}Handler {
 };
 
 struct Coro{{value.callee}}Handler {
+    Coro{{value.callee}}Handler() = default;
+    virtual ~Coro{{value.callee}}Handler() = default;
+
     {% for func in value.definitions %}
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> {{func.func_name}}(std::shared_ptr<asio::experimental::concurrent_channel<void(frpc::error_code, {{_format_args_type(func.inputs)}})>>,
@@ -234,6 +245,11 @@ public:
         if (m_pool_ptr)
             m_pool_ptr->stop();
     }
+
+    {{value.callee}}(const {{value.callee}}&) = delete;
+    {{value.callee}}& operator=(const {{value.callee}}&) = delete;
+    {{value.callee}}({{value.callee}}&&) = delete;
+    {{value.callee}}& operator=({{value.callee}}&&) = delete;
 
     decltype(auto) socket() {
         return m_channel->socket();

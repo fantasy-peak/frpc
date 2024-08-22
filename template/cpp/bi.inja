@@ -17,23 +17,28 @@ namespace {{node.property.namespace}} {
 class {{value.caller}} final {
 public:
         {{value.caller}}(const frpc::ChannelConfig& config,
-              std::function<void(std::string)> error) 
+              const std::function<void(std::string)>& error)
               : m_channel(std::make_unique<frpc::BiChannel>(config, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
               , m_error(error) {
         }
         {{value.caller}}(const frpc::ChannelConfig& config,
               const std::shared_ptr<zmq::context_t>& context_ptr,
               const std::shared_ptr<zmq::socket_t>& socket_ptr,
-              std::function<void(std::string)> error) 
+              const std::function<void(std::string)>& error)
               : m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, socket_ptr, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
               , m_error(error) {
         }
         {{value.caller}}(const frpc::ChannelConfig& config,
               const std::shared_ptr<zmq::context_t>& context_ptr,
-              std::function<void(std::string)> error) 
+              const std::function<void(std::string)>& error)
               : m_channel(std::make_unique<frpc::BiChannel>(config, context_ptr, error, [this](auto& recv_msgs) mutable { dispatch(recv_msgs); }))
               , m_error(error) {
         }
+
+        {{value.caller}}(const {{value.caller}}&) = delete;
+        {{value.caller}}& operator=(const {{value.caller}}&) = delete;
+        {{value.caller}}({{value.caller}}&&) = delete;
+        {{value.caller}}& operator=({{value.caller}}&&) = delete;
 
         void start() {
             m_channel->start();
@@ -85,7 +90,7 @@ public:
     auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void({{_format_args_type(func.outputs)}})>(
             [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}) mutable {
-                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+                auto handler_ptr = std::make_shared<Handler>(std::forward<Handler>(handler));
                 this->{{func.func_name}}(
                         {{_format_args_name_and_move(func.inputs)}},
                         [handler_ptr = std::move(handler_ptr)]({{_format_args(func.outputs)}}) mutable {
@@ -103,7 +108,7 @@ public:
     auto {{func.func_name}}_coro({{_format_args(func.inputs)}}, const std::chrono::milliseconds& timeout, CompletionToken&& token) {
         return asio::async_initiate<CompletionToken, void(std::optional<std::tuple<{{_format_args_type(func.outputs)}}>>)>(
             [this]<typename Handler>(Handler&& handler, {{_format_args(func.inputs)}}, const auto& timeout) mutable {
-                auto handler_ptr = std::make_shared<Handler>(std::move(handler));
+                auto handler_ptr = std::make_shared<Handler>(std::forward<Handler>(handler));
                 this->{{func.func_name}}(
                             {{_format_args_name_and_move(func.inputs)}},
                             [handler_ptr]({{_format_args(func.outputs)}}) mutable {
@@ -242,12 +247,18 @@ private:
 };
 
 struct {{value.callee}}Handler {
+    {{value.callee}}Handler() = default;
+    virtual ~{{value.callee}}Handler() = default;
+
     {% for func in value.definitions %}
         virtual void {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
     {% endfor %}
 };
 
 struct AsioCoro{{value.callee}}Handler {
+    AsioCoro{{value.callee}}Handler() = default;
+    virtual ~AsioCoro{{value.callee}}Handler() = default;
+
 #ifdef __cpp_impl_coroutine
     {% for func in value.definitions %}
         virtual asio::awaitable<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
@@ -260,6 +271,9 @@ struct AsioCoro{{value.callee}}Handler {
 };
 
 struct FrpcCoro{{value.callee}}Handler {
+    FrpcCoro{{value.callee}}Handler() = default;
+    virtual ~FrpcCoro{{value.callee}}Handler() = default;
+
 #ifdef __cpp_impl_coroutine
     {% for func in value.definitions %}
         virtual frpc::Task<void> {{func.func_name}}({{_format_args(func.inputs)}}, std::function<void({{_format_args_type(func.outputs)}})> cb) noexcept = 0;
@@ -323,6 +337,11 @@ public:
             m_pool_ptr->stop();
 #endif
     }
+
+    {{value.callee}}(const {{value.callee}}&) = delete;
+    {{value.callee}}& operator=(const {{value.callee}}&) = delete;
+    {{value.callee}}({{value.callee}}&&) = delete;
+    {{value.callee}}& operator=({{value.callee}}&&) = delete;
 
     auto& socket() {
         return m_channel->socket();

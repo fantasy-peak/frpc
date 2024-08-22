@@ -7,7 +7,9 @@
 #include <functional>
 
 #include <msgpack.hpp>
+#include <zmq.hpp>
 #include <uuid/uuid.h>
+#include <nlohmann/json.hpp>
 
 namespace nlohmann {
 

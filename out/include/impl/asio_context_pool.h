@@ -3,6 +3,9 @@
 #ifndef _FRPC_CONTEXT_POOL_H_
 #define _FRPC_CONTEXT_POOL_H_
 
+#include <list>
+#include <thread>
+
 #ifdef FRPC_USE_BOOST_ASIO
 #include <boost/asio.hpp>
 #include <boost/asio/experimental/concurrent_channel.hpp>
@@ -38,12 +41,16 @@ class ContextPool final {
 
     void start() {
         for (auto& context : m_io_contexts)
-            m_threads.emplace_back(std::jthread([&] { context->run(); }));
+            m_threads.emplace_back(std::thread([&] { context->run(); }));
     }
 
     void stop() {
         for (auto& context_ptr : m_io_contexts)
             context_ptr->stop();
+        for (auto& thread : m_threads) {
+            if (thread.joinable())
+                thread.join();
+        }
     }
 
     asio::io_context& getIoContext() {
@@ -62,7 +69,7 @@ class ContextPool final {
     std::vector<std::shared_ptr<asio::io_context>> m_io_contexts;
     std::list<asio::any_io_executor> m_work;
     std::atomic_uint64_t m_next_io_context;
-    std::vector<std::jthread> m_threads;
+    std::vector<std::thread> m_threads;
 };
 
 }  // namespace frpc

@@ -57,7 +57,7 @@ namespace fantasy {
 class HelloWorldClient final {
   public:
     HelloWorldClient(const frpc::ChannelConfig& config,
-                     std::function<void(std::string)> error)
+                     const std::function<void(std::string)>& error)
         : m_channel(std::make_unique<frpc::BiChannel>(
               config,
               error,
@@ -68,7 +68,7 @@ class HelloWorldClient final {
     HelloWorldClient(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
                      const std::shared_ptr<zmq::socket_t>& socket_ptr,
-                     std::function<void(std::string)> error)
+                     const std::function<void(std::string)>& error)
         : m_channel(std::make_unique<frpc::BiChannel>(
               config,
               context_ptr,
@@ -80,7 +80,7 @@ class HelloWorldClient final {
 
     HelloWorldClient(const frpc::ChannelConfig& config,
                      const std::shared_ptr<zmq::context_t>& context_ptr,
-                     std::function<void(std::string)> error)
+                     const std::function<void(std::string)>& error)
         : m_channel(std::make_unique<frpc::BiChannel>(
               config,
               context_ptr,
@@ -88,6 +88,11 @@ class HelloWorldClient final {
               [this](auto& recv_msgs) mutable { dispatch(recv_msgs); })),
           m_error(error) {
     }
+
+    HelloWorldClient(const HelloWorldClient&) = delete;
+    HelloWorldClient& operator=(const HelloWorldClient&) = delete;
+    HelloWorldClient(HelloWorldClient&&) = delete;
+    HelloWorldClient& operator=(HelloWorldClient&&) = delete;
 
     void start() {
         m_channel->start();
@@ -178,7 +183,7 @@ class HelloWorldClient final {
                                      std::optional<std::string> date,
                                      frpc::DateTime date_time) mutable {
                 auto handler_ptr =
-                    std::make_shared<Handler>(std::move(handler));
+                    std::make_shared<Handler>(std::forward<Handler>(handler));
                 this->hello_world(
                     std::move(bank_info),
                     std::move(bank_name),
@@ -239,7 +244,7 @@ class HelloWorldClient final {
                                      frpc::DateTime date_time,
                                      const auto& timeout) mutable {
                 auto handler_ptr =
-                    std::make_shared<Handler>(std::move(handler));
+                    std::make_shared<Handler>(std::forward<Handler>(handler));
                 this->hello_world(
                     std::move(bank_info),
                     std::move(bank_name),
@@ -473,6 +478,9 @@ class HelloWorldClient final {
 };
 
 struct HelloWorldServerHandler {
+    HelloWorldServerHandler() = default;
+    virtual ~HelloWorldServerHandler() = default;
+
     virtual void hello_world(
         BankInfo bank_info,
         std::string bank_name,
@@ -485,6 +493,9 @@ struct HelloWorldServerHandler {
 };
 
 struct AsioCoroHelloWorldServerHandler {
+    AsioCoroHelloWorldServerHandler() = default;
+    virtual ~AsioCoroHelloWorldServerHandler() = default;
+
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(
         BankInfo bank_info,
@@ -509,6 +520,9 @@ struct AsioCoroHelloWorldServerHandler {
 };
 
 struct FrpcCoroHelloWorldServerHandler {
+    FrpcCoroHelloWorldServerHandler() = default;
+    virtual ~FrpcCoroHelloWorldServerHandler() = default;
+
 #ifdef __cpp_impl_coroutine
     virtual frpc::Task<void> hello_world(
         BankInfo bank_info,
@@ -602,6 +616,11 @@ class HelloWorldServer final {
             m_pool_ptr->stop();
 #endif
     }
+
+    HelloWorldServer(const HelloWorldServer&) = delete;
+    HelloWorldServer& operator=(const HelloWorldServer&) = delete;
+    HelloWorldServer(HelloWorldServer&&) = delete;
+    HelloWorldServer& operator=(HelloWorldServer&&) = delete;
 
     auto& socket() {
         return m_channel->socket();
@@ -843,11 +862,17 @@ MSGPACK_ADD_ENUM(fantasy::HelloWorldSenderHelloWorldReceiver)
 namespace fantasy {
 
 struct HelloWorldReceiverHandler {
+    HelloWorldReceiverHandler() = default;
+    virtual ~HelloWorldReceiverHandler() = default;
+
     virtual void hello_world(std::string in) noexcept = 0;
     virtual void notice(int32_t in, std::string info) noexcept = 0;
 };
 
 struct AsioCoroHelloWorldReceiverHandler {
+    AsioCoroHelloWorldReceiverHandler() = default;
+    virtual ~AsioCoroHelloWorldReceiverHandler() = default;
+
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(std::string in) noexcept = 0;
     virtual asio::awaitable<void> notice(int32_t in,
@@ -859,6 +884,9 @@ struct AsioCoroHelloWorldReceiverHandler {
 };
 
 struct FrpcCoroHelloWorldReceiverHandler {
+    FrpcCoroHelloWorldReceiverHandler() = default;
+    virtual ~FrpcCoroHelloWorldReceiverHandler() = default;
+
 #ifdef __cpp_impl_coroutine
     virtual frpc::Task<void> hello_world(std::string in) noexcept = 0;
     virtual frpc::Task<void> notice(int32_t in, std::string info) noexcept = 0;
@@ -930,6 +958,11 @@ class HelloWorldReceiver final {
             m_pool_ptr->stop();
 #endif
     }
+
+    HelloWorldReceiver(const HelloWorldReceiver&) = delete;
+    HelloWorldReceiver& operator=(const HelloWorldReceiver&) = delete;
+    HelloWorldReceiver(HelloWorldReceiver&&) = delete;
+    HelloWorldReceiver& operator=(HelloWorldReceiver&&) = delete;
 
     void start() {
         m_channel->start();
@@ -1126,6 +1159,11 @@ class HelloWorldSender final {
     ~HelloWorldSender() {
     }
 
+    HelloWorldSender(const HelloWorldSender&) = delete;
+    HelloWorldSender& operator=(const HelloWorldSender&) = delete;
+    HelloWorldSender(HelloWorldSender&&) = delete;
+    HelloWorldSender& operator=(HelloWorldSender&&) = delete;
+
     static auto create(frpc::ChannelConfig& config) {
         if ((config.socktype != zmq::socket_type::pub) &&
             config.socktype != zmq::socket_type::push)
@@ -1291,6 +1329,11 @@ class StreamClient final {
             m_pool_ptr->stop();
     }
 
+    StreamClient(const StreamClient&) = delete;
+    StreamClient& operator=(const StreamClient&) = delete;
+    StreamClient(StreamClient&&) = delete;
+    StreamClient& operator=(StreamClient&&) = delete;
+
     void start() {
         m_channel->start();
     }
@@ -1430,6 +1473,9 @@ class StreamClient final {
 };
 
 struct StreamServerHandler {
+    StreamServerHandler() = default;
+    virtual ~StreamServerHandler() = default;
+
     virtual void hello_world(
         std::shared_ptr<asio::experimental::concurrent_channel<
             void(frpc::error_code, std::string)>>,
@@ -1437,6 +1483,9 @@ struct StreamServerHandler {
 };
 
 struct CoroStreamServerHandler {
+    CoroStreamServerHandler() = default;
+    virtual ~CoroStreamServerHandler() = default;
+
 #ifdef __cpp_impl_coroutine
     virtual asio::awaitable<void> hello_world(
         std::shared_ptr<asio::experimental::concurrent_channel<
@@ -1501,6 +1550,11 @@ class StreamServer final {
         if (m_pool_ptr)
             m_pool_ptr->stop();
     }
+
+    StreamServer(const StreamServer&) = delete;
+    StreamServer& operator=(const StreamServer&) = delete;
+    StreamServer(StreamServer&&) = delete;
+    StreamServer& operator=(StreamServer&&) = delete;
 
     decltype(auto) socket() {
         return m_channel->socket();
