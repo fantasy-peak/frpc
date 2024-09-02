@@ -220,7 +220,7 @@ void formatCode(const std::string& file, const std::string& content) {
     char buffer[2048] = {};
     std::string result;
     char* clang_format_path = std::getenv("FRPC_CLANG_FORMAT");
-    auto command = fmt::format("{} {}", clang_format_path ? clang_format_path : "clang-format", file);
+    auto command = fmt::format("{} -i {}", clang_format_path ? clang_format_path : "clang-format", file);
     spdlog::info("start format {}", command);
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {
@@ -234,12 +234,7 @@ void formatCode(const std::string& file, const std::string& content) {
     pclose(pipe);
     if (result.empty())
         return;
-    std::ofstream write(file);
-    if (!write.is_open()) {
-        spdlog::error("open {} fail", file);
-        return;
-    }
-    write << result;
+    spdlog::info("result: {}", result);
 }
 
 auto sort(nlohmann::json json) {
