@@ -60,6 +60,11 @@ using Callback = std::function<void(const drogon::HttpRequestPtr&, std::function
                         }
                     {% endif %}
                 {% endfor %}
+
+                void stop() {
+                    m_client->stop();
+                }
+
                 std::unique_ptr<{{node.property.namespace}}::{{value.caller}}> m_client;
             };
         {% endif %}
@@ -99,7 +104,7 @@ int main(int argc, char** argv) {
 
     drogon::app().registerHandler(
         "/interface",
-        [&] (const drogon::HttpRequestPtr& http_request_ptr, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
+        [&] (const drogon::HttpRequestPtr&, std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
             nlohmann::json json;
             using namespace {{node.property.namespace}};
             {% for value in node.value.interface %}
@@ -150,5 +155,21 @@ int main(int argc, char** argv) {
             spdlog::info("{}", json);
             return settings;
         }())
+        .setIntSignalHandler([&] {
+            drogon::app().quit();
+            {% for value in node.value.interface %}
+                {% if value.pattern == "bi" %}
+                    {% set has_web="false" %}
+                    {% for func in value.definitions %}
+                        {% if existsIn(func, "web")  == true %}
+                            {% set has_web="true" %}
+                        {% endif %}
+                    {% endfor %}
+                    {% if has_web  == "true" %}
+                        {{_snake(value.node_name)}}_client.stop();
+                    {% endif %}
+                {% endif %}
+            {% endfor %}
+        })
         .run();
 }

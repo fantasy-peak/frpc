@@ -98,6 +98,11 @@ class HelloWorldClient final {
         m_channel->start();
     }
 
+    void stop() {
+        if (m_channel)
+            m_channel->stop();
+    }
+
     decltype(auto) socket() {
         return m_channel->socket();
     }
@@ -611,6 +616,7 @@ class HelloWorldServer final {
     }
 
     ~HelloWorldServer() {
+        stop();
 #ifdef __cpp_impl_coroutine
         if (m_pool_ptr)
             m_pool_ptr->stop();
@@ -637,6 +643,11 @@ class HelloWorldServer final {
 
     void start() {
         m_channel->start();
+    }
+
+    void stop() {
+        if (m_channel)
+            m_channel->stop();
     }
 
     static auto create(frpc::ChannelConfig& config,

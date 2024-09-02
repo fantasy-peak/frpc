@@ -65,6 +65,10 @@ struct HelloWorldApi final {
             });
     }
 
+    void stop() {
+        m_client->stop();
+    }
+
     std::unique_ptr<fantasy::HelloWorldClient> m_client;
 };
 
@@ -85,7 +89,7 @@ int main(int argc, char** argv) {
 
     drogon::app().registerHandler(
         "/interface",
-        [&](const drogon::HttpRequestPtr& http_request_ptr,
+        [&](const drogon::HttpRequestPtr&,
             std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
             nlohmann::json json;
             using namespace fantasy;
@@ -139,5 +143,9 @@ int main(int argc, char** argv) {
             spdlog::info("{}", json);
             return settings;
         }())
+        .setIntSignalHandler([&] {
+            drogon::app().quit();
+            hello_world_api_client.stop();
+        })
         .run();
 }

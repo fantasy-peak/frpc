@@ -59,6 +59,12 @@ class BiChannel final {
     }
 
     ~BiChannel() {
+        stop();
+    }
+
+    void stop() {
+        if (!m_running.load(std::memory_order_acquire))
+            return;
         m_running.store(false, std::memory_order_release);
         if (m_thread.joinable())
             m_thread.join();
