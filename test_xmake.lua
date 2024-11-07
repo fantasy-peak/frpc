@@ -4,9 +4,11 @@ set_xmakever("2.8.5")
 
 add_repositories("my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
 
-add_requires("spdlog", "asio", "nlohmann_json")
+add_requires("boost", {configs={cmake=false}})
+add_requires("spdlog")
+add_requires("asio", "nlohmann_json")
 add_requires("cppzmq", {system = false})
-add_requires("msgpack-cxx", {system = false})
+add_requires("msgpack-cxx", {system = false, configs={boost=false}})
 
 set_policy("check.auto_ignore_flags", false)
 add_cxflags("-O2 -Wall -Wextra -pedantic-errors -Wno-missing-field-initializers -Wno-ignored-qualifiers")
@@ -24,7 +26,7 @@ target("coro_bi")
     set_languages("c++20")
     set_kind("binary")
     add_files("test/cpp/coro_bi.cpp")
-    add_packages("msgpack-cxx", "nlohmann_json", "cppzmq", "spdlog", "asio")
+    add_packages("msgpack-cxx", "nlohmann_json", "cppzmq", "spdlog", "asio", "boost")
     add_syslinks("pthread", "uuid")
 target_end()
 

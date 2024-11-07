@@ -30,8 +30,9 @@ auto getAwaiterImpl(T&& value) noexcept(
 }
 
 template <typename T>
-auto getAwaiter(T&& value) noexcept(noexcept(getAwaiterImpl(static_cast<T&&>(
-    value)))) -> decltype(getAwaiterImpl(static_cast<T&&>(value))) {
+auto getAwaiter(T&& value) noexcept(
+    noexcept(getAwaiterImpl(static_cast<T&&>(value))))
+    -> decltype(getAwaiterImpl(static_cast<T&&>(value))) {
     return getAwaiterImpl(static_cast<T&&>(value));
 }
 

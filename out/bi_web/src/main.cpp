@@ -7,7 +7,7 @@
 #include <memory>
 
 #include <drogon/drogon.h>
-#include <spdlog/spdlog.h>
+#include <trantor/utils/Logger.h>
 
 #include <fantasy.hpp>
 #include <string>
@@ -21,7 +21,7 @@ struct HelloWorldApi final {
         : m_client(fantasy::HelloWorldClient::create(
               bi_config,
               [](std::string error) {
-                  spdlog::error("fantasy::HelloWorldClient error: {}", error);
+                  LOG_ERROR << "fantasy::HelloWorldClient error: " << error;
               })) {
         m_client->start();
     }
@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
                     client_max_body_size_ptr;
             Json::FastWriter writer;
             std::string json{writer.write(settings)};
-            spdlog::info("{}", json);
+            LOG_INFO << json;
             return settings;
         }())
         .setIntSignalHandler([&] {

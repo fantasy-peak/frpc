@@ -6,7 +6,9 @@ add_defines("VERSION=\"1.0.0\"")
 
 add_repositories("my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
 
-add_requires("yaml-cpp", "nlohmann_json", "spdlog", "inja", "boost")
+add_requires("boost", {configs={cmake=false}})
+add_requires("spdlog", {configs={std_format=true}})
+add_requires("yaml-cpp", "nlohmann_json", "inja")
 
 set_languages("c++23")
 set_policy("check.auto_ignore_flags", false)

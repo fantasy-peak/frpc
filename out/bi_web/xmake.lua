@@ -2,11 +2,12 @@
 
 set_project("web")
 set_version("0.0.1", {build = "%Y%m%d%H%M"})
-set_xmakever("2.8.5")
+set_xmakever("2.9.6")
 
 add_repositories("my_private_repo https://github.com/fantasy-peak/xmake-repo.git")
 
-add_requires("nlohmann_json", "spdlog", "drogon", "asio", "cppzmq", "msgpack-cxx")
+add_requires("msgpack-cxx", {system = false, configs={boost=false}})
+add_requires("nlohmann_json", "drogon", "asio", "cppzmq")
 
 set_languages("c++23")
 set_policy("check.auto_ignore_flags", false)
@@ -16,5 +17,5 @@ add_includedirs("include")
 target("bi-web")
     set_kind("binary")
     add_files("src/main.cpp")
-    add_packages("drogon", "nlohmann_json", "spdlog", "asio", "cppzmq", "msgpack-cxx")
+    add_packages("drogon", "nlohmann_json", "asio", "cppzmq", "msgpack-cxx")
 target_end()

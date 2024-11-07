@@ -7,7 +7,7 @@
 #include <memory>
 
 #include <drogon/drogon.h>
-#include <spdlog/spdlog.h>
+#include <trantor/utils/Logger.h>
 
 #include <{{node.property.filename}}>
 #include <string>
@@ -26,7 +26,7 @@ using Callback = std::function<void(const drogon::HttpRequestPtr&, std::function
             struct {{value.node_name}} final {
                 {{value.node_name}}(frpc::ChannelConfig bi_config)
                 : m_client({{node.property.namespace}}::{{value.caller}}::create(bi_config, [](std::string error) {
-                    spdlog::error("{{node.property.namespace}}::{{value.caller}} error: {}", error);
+                    LOG_ERROR << "{{node.property.namespace}}::{{value.caller}} error: " << error;
                 })) {
                     m_client->start();
                 }
@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
                 settings["app"]["client_max_body_size"] = client_max_body_size_ptr;
             Json::FastWriter writer;
             std::string json{writer.write(settings)};
-            spdlog::info("{}", json);
+            LOG_INFO << json;
             return settings;
         }())
         .setIntSignalHandler([&] {

@@ -220,7 +220,7 @@ void formatCode(const std::string& file, const std::string& content) {
     char buffer[2048] = {};
     std::string result;
     char* clang_format_path = std::getenv("FRPC_CLANG_FORMAT");
-    auto command = fmt::format("{} -i {}", clang_format_path ? clang_format_path : "clang-format", file);
+    auto command = std::format("{} -i {}", clang_format_path ? clang_format_path : "clang-format", file);
     spdlog::info("start format {}", command);
     FILE* pipe = popen(command.c_str(), "r");
     if (!pipe) {

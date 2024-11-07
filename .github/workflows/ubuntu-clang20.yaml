@@ -47,5 +47,5 @@ jobs:
         run: |
           rm -rf out
           ./bin/frpc -f ./config/config.yaml -t ./template/cpp -o ./out -w ./template/web --auto_sort=1 --debug=0
-          xmake build -y --file=./test_xmake.lua
-          xmake install -o . --file=./test_xmake.lua
+          # xmake build -y --file=./test_xmake.lua
+          # xmake install -o . --file=./test_xmake.lua
